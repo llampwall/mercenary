@@ -65,13 +65,26 @@ function buildArgs(opts) {
 
   if (opts.allowedTools) args.push('--allowed-tools', opts.allowedTools);
   if (opts.model) args.push('--model', opts.model);
-  if (opts.outputFormat) args.push('--output-format', opts.outputFormat);
+  // Role-based preset — callers declare what they are, not which flags they need.
+  // role: 'pipeline' → headless agent, structured streaming output (stream-json + verbose)
+  // role: 'allmind'  → AllMind-voiced session, plain text output + persona injection
+  // streaming: true  → legacy alias for pipeline
+  if (opts.role === 'pipeline' || opts.streaming) {
+    args.push('--output-format', 'stream-json', '--verbose');
+  } else if (opts.role === 'allmind') {
+    args.push('--output-format', 'text');
+  } else if (opts.outputFormat) {
+    args.push('--output-format', opts.outputFormat);
+    if (opts.verbose) args.push('--verbose');
+  }
   if (opts.maxTurns) args.push('--max-turns', String(opts.maxTurns));
 
   // Persona first, then user's append-system-prompt
+  // role: 'allmind' defaults to the AllMind persona path; caller can override with opts.persona
+  const persona = opts.persona || (opts.role === 'allmind' ? ALLMIND_PERSONA_PATH : null);
   let appendSystemPrompt = '';
-  if (opts.persona) {
-    appendSystemPrompt += loadPersona(opts.persona);
+  if (persona) {
+    appendSystemPrompt += loadPersona(persona);
   }
   if (opts.appendSystemPrompt) {
     if (appendSystemPrompt) appendSystemPrompt += '\n\n';
@@ -110,13 +123,22 @@ function run(opts = {}) {
     });
     proc.unref();
 
+    // Notify caller of PID synchronously (still inside Promise executor)
+    if (opts.onStart) opts.onStart(proc.pid);
+
     let stdout = '';
     let stderr = '';
     let killed = false;
     let timer = null;
 
-    proc.stdout.on('data', (chunk) => { stdout += chunk; });
-    proc.stderr.on('data', (chunk) => { stderr += chunk; });
+    proc.stdout.on('data', (chunk) => {
+      stdout += chunk;
+      if (opts.onData) opts.onData(chunk, 'stdout');
+    });
+    proc.stderr.on('data', (chunk) => {
+      stderr += chunk;
+      if (opts.onData) opts.onData(chunk, 'stderr');
+    });
 
     if (opts.timeout) {
       const timeoutMs = opts.timeout * 1000;
@@ -153,6 +175,11 @@ async function openSession(opts = {}) {
   const title = opts.title || 'Mercenary';
   const tmpBase = mkdtempSync(join(tmpdir(), 'mercenary-'));
 
+  // Role-based preset — callers declare what they are, not which flags they need.
+  // role: 'coordinator' → interactive observer with standard pipeline toolset
+  const allowedTools = opts.allowedTools ??
+    (opts.role === 'coordinator' ? 'Bash,Read,Edit,Write,Glob,Grep' : undefined);
+
   // Build launcher PowerShell script
   const lines = [
     '# Mercenary launcher -- auto-generated',
@@ -162,8 +189,23 @@ async function openSession(opts = {}) {
     `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "${opts.maxTokens || 65536}"`,
   ];
 
+  // Set working directory before launching claude
+  if (opts.cwd) {
+    lines.push(`Set-Location "${opts.cwd.replace(/"/g, '`"')}"`);
+  }
+
   // Build claude invocation args
   const claudeArgs = [`& "${claudePath}"`, '--dangerously-skip-permissions', '--no-session-persistence'];
+
+  // Tool restrictions
+  if (allowedTools) {
+    claudeArgs.push(`--allowed-tools "${allowedTools}"`);
+  }
+
+  // Model selection
+  if (opts.model) {
+    claudeArgs.push(`--model "${opts.model}"`);
+  }
 
   // System prompt (write to temp file to avoid escaping issues)
   if (opts.systemPrompt) {
@@ -173,9 +215,11 @@ async function openSession(opts = {}) {
   }
 
   // Persona + append-system-prompt
+  // role: 'allmind' defaults to the AllMind persona path; caller can override with opts.persona
+  const sessionPersona = opts.persona || (opts.role === 'allmind' ? ALLMIND_PERSONA_PATH : null);
   let appendSystemPrompt = '';
-  if (opts.persona) {
-    appendSystemPrompt += loadPersona(opts.persona);
+  if (sessionPersona) {
+    appendSystemPrompt += loadPersona(sessionPersona);
   }
   if (opts.appendSystemPrompt) {
     if (appendSystemPrompt) appendSystemPrompt += '\n\n';
@@ -197,11 +241,12 @@ async function openSession(opts = {}) {
   const launcherPath = join(tmpBase, 'launcher.ps1');
   writeFileSync(launcherPath, lines.join('\n'), 'utf8');
 
-  // Spawn Windows Terminal
-  const proc = spawn('wt', [
-    '-w', '0', 'nt', '--title', title,
-    'pwsh', '-NoProfile', '-NoExit', '-File', launcherPath
-  ], {
+  // Spawn Windows Terminal — pass cwd as -d so the tab opens in the right directory
+  const wtArgs = ['-w', '0', 'nt', '--title', title];
+  if (opts.cwd) wtArgs.push('-d', opts.cwd);
+  wtArgs.push('pwsh', '-NoProfile', '-NoExit', '-File', launcherPath);
+
+  const proc = spawn('wt', wtArgs, {
     detached: true,
     stdio: 'ignore',
     shell: false,
