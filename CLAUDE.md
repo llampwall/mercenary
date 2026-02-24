@@ -5,6 +5,38 @@ Repo: mercenary
 - Be direct. Prefer simple solutions.
 - Default to tests + lint + CI green.
 
+## Project
+
+Node.js CLI + module that wraps Claude Code's `claude` command with proper subprocess management for Windows. Single file, zero dependencies.
+
+## Language
+
+JavaScript (Node.js 22, ESM)
+
+## Structure
+
+- `mercenary.js` -- Single file: module exports + CLI entry point
+- `test/mercenary.test.js` -- Tests
+- `docs/specs/mercenary.md` -- Specification
+
+## Key Rules
+
+- Zero external dependencies. Only Node.js stdlib.
+- Single file (`mercenary.js`). No build step.
+- Always set `--dangerously-skip-permissions` and `--no-session-persistence` on spawned claude processes
+- Always delete `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY` from child env
+- Use `shell: false` with resolved claude binary path (not shell lookup)
+- Use `taskkill /T /F /PID` for process tree kill on Windows
+- `--am` flag reads persona from `P:\software\allmind\data\persona\allmind-voice.md`
+
+## Commands
+
+```powershell
+node mercenary.js --prompt "test" --timeout 10   # One-shot
+node mercenary.js --interactive                    # Visible terminal
+node test/mercenary.test.js                        # Run tests
+```
+
 ## Project Memory System
 
 This project maintains institutional knowledge in `docs/project_notes/` for consistency across sessions.

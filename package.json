@@ -1,0 +1,15 @@
+{
+  "name": "mercenary",
+  "version": "0.1.0",
+  "description": "Claude Code subprocess wrapper for Windows",
+  "type": "module",
+  "bin": {
+    "mercenary": "./mercenary.js"
+  },
+  "scripts": {
+    "test": "node test/mercenary.test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
