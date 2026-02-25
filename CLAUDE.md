@@ -29,7 +29,8 @@ JavaScript (Node.js 22, ESM)
 - Force child `SHELL` to `pwsh` in `sanitizeEnv()` to avoid inherited `bash.exe` behavior on Windows automation hosts.
 - Use `shell: false` with resolved claude binary path (not shell lookup)
 - Use `taskkill /T /F /PID` for process tree kill on Windows
-- `pipeline` and `coordinator` strict MCP defaults should fall back to `P:\software\allmind\config\mcp-none.json` when `mcpConfig` is not provided.
+- `pipeline` defaults to strict MCP isolation and falls back to `P:\software\allmind\config\mcp-none.json` when `mcpConfig` is not provided.
+- Interactive sessions default `strictMcp` to `false`; strict MCP in interactive mode must be explicitly opted in.
 - `--am` flag reads persona from `P:\software\allmind\data\persona\allmind-voice.md`
 - When opening this repo, check if session brief shows `ACTION REQUIRED` — if so, offer to run `/update-memory`
 

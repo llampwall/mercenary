@@ -67,7 +67,8 @@
 
 **Constraint:**
 - Core implementation MUST remain in `mercenary.js` as a dependency-free Node.js module/CLI.
-- All Claude launches MUST include `--dangerously-skip-permissions` and `--no-session-persistence`.
+- All Claude launches MUST include `--dangerously-skip-permissions`.
+- One-shot launches MUST include `--no-session-persistence`; interactive launches MUST NOT include it.
 - Child env MUST remove `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, and `ANTHROPIC_API_KEY`.
 - Timeout and external termination MUST use process-tree kill (`taskkill /T /F /PID`).
 
@@ -113,5 +114,36 @@
   - Makes MCP usage explicit and reproducible.
 - Trade-offs:
   - Callers must provide `mcpConfig` when they need selective MCP access.
+
+**Status:** Superseded by ADR-005
+
+### ADR-005: Keep strict MCP default for pipeline, but make interactive strict mode opt-in (2026-02-24)
+
+**Context:**
+- Strict MCP mode removed user MCP fan-out for automation, but applying it by default to interactive sessions caused hangs in real usage.
+- Interactive launches need reliability first; strict MCP in this path must be intentional and validated.
+
+**Constraint:**
+- `run()` with `role: "pipeline"` MUST default to strict MCP isolation.
+- Pipeline strict mode MUST fall back to `P:\\software\\allmind\\config\\mcp-none.json` when no `mcpConfig` is provided.
+- `openSession()` (including `role: "coordinator"`) MUST default `strictMcp` to `false`.
+- Strict MCP in interactive mode MUST be explicitly opted in at the call site (`strictMcp: true`), with explicit `mcpConfig` preferred.
+
+**Decision:**
+- Keep strict MCP defaults in one-shot pipeline execution.
+- Remove strict-MCP-by-default behavior from interactive sessions and treat it as an explicit override.
+- Add launcher diagnostics and safer prompt argument handling to improve interactive troubleshooting.
+
+**Alternatives:**
+- Keep strict MCP as the default for interactive coordinator sessions -> rejected because it caused silent hangs.
+- Remove strict MCP defaults everywhere -> rejected because pipeline automation still requires predictable MCP isolation.
+
+**Consequences:**
+- Benefits:
+  - Interactive sessions launch more reliably.
+  - Pipeline automation keeps deterministic MCP behavior.
+- Trade-offs:
+  - Interactive strict mode now requires explicit caller configuration.
+  - Teams must document when interactive strict mode is actually required.
 
 **Status:** Active

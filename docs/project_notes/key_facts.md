@@ -6,6 +6,7 @@
 - Dev JSON one-shot: `node mercenary.js --prompt "Reply with exactly: OK" --json --timeout 30`
 - Dev interactive: `node mercenary.js --interactive --title "Mercenary"`
 - Test: `npm test` (runs `node test/mercenary.test.js`).
+- Integration tests: `$env:MERCENARY_INTEGRATION=1; npm test`
 - Lint: no lint command is defined in `package.json`.
 
 ## Local development
@@ -79,7 +80,8 @@
 - Interactive mode requires both Windows Terminal (`wt`) and PowerShell (`pwsh`).
 - `--no-session-persistence` is used in one-shot (`run`) launches; interactive sessions intentionally omit it.
 - CLI parser ignores unknown flags; several options are module-only today (`role`, `streaming`, `strictMcp`, `mcpConfig`, `onStart`, `onData`).
-- `pipeline` and `coordinator` presets intentionally default to strict MCP isolation.
+- `pipeline` preset intentionally defaults to strict MCP isolation with `mcp-none.json` fallback when `mcpConfig` is not provided.
+- Interactive sessions default `strictMcp` to `false`; strict MCP in interactive mode is explicit opt-in and should be smoke-tested.
 - Line endings are LF by default; only `.bat`/`.cmd` use CRLF.
 - Do not store secrets in repo notes or committed env files; document env var names only.
 

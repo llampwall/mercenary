@@ -1,7 +1,7 @@
 # Operating Brief
 
 ## One-liner
-- `mercenary` is a Node.js 22+ Windows-first CLI/module that standardizes Claude CLI subprocess lifecycle for one-shot and interactive workflows.
+- `mercenary` is a Node.js 22+ Windows-first CLI/module that standardizes Claude CLI subprocess lifecycle for one-shot automation and visible interactive workflows.
 
 ## Goals
 - Provide one reusable spawn primitive for direct CLI usage and downstream AllMind consumers.
@@ -15,8 +15,10 @@
 
 ## Current state
 - Working: one-shot mode (`run()` / `--prompt`) resolves Claude path, captures stdout/stderr, and returns timeout/duration metadata.
-- Working: interactive mode (`openSession()` / `--interactive`) launches Windows Terminal via generated PowerShell launcher script.
-- Working: role-based presets (`pipeline`, `allmind`, `coordinator`) are implemented, including strict MCP defaults for automation roles.
+- Working: one-shot `pipeline` preset enforces strict MCP isolation and defaults `--mcp-config` to `P:\\software\\allmind\\config\\mcp-none.json` when no config is provided.
+- Working: interactive mode (`openSession()` / `--interactive`) launches Windows Terminal via generated PowerShell launcher script with startup diagnostics.
+- Working: interactive prompt payloads are loaded from temp files into PowerShell variables before launch to avoid inline subexpression parsing issues.
+- Working: role-based presets (`pipeline`, `allmind`, `coordinator`) are implemented.
 - Working: child env sanitization strips nested-session/auth vars and forces `SHELL=pwsh` for Windows consistency.
 - Fragile: CI is placeholder-only and does not execute tests.
 - Fragile: integration tests require local Claude availability and are skipped unless `MERCENARY_INTEGRATION=1`.
@@ -34,6 +36,7 @@
 - Components:
   - Process wrapper: `run`, `openSession`, `treeKill`, `resolveClaudePath`
   - CLI execution path: `parseArgs` plus mode routing (`--prompt`, `--interactive`, `--kill`)
+  - Role preset layer: one-shot preset handling in `buildArgs()` and interactive defaults in `openSession()`
   - Test layer: `node:test` suite covering exports, parser behavior, kill behavior, and integration gates
 - Data flow:
   1) Caller invokes CLI or imports module API.
@@ -45,17 +48,18 @@
 - ADR-001: Canonical project memory is `docs/project_notes/`.
 - ADR-002: Windows-safe automation invocation and newline policy are mandatory.
 - ADR-003: Mercenary remains a Windows-first single-file wrapper with mode-specific launch flags and required env sanitization.
-- ADR-004: `pipeline` and `coordinator` roles default to strict MCP isolation unless explicitly overridden.
+- ADR-005: `pipeline` defaults to strict MCP isolation; interactive sessions require explicit strict-MCP opt-in.
 
 ## Known hazards
 - `--interactive` depends on `wt` and `pwsh` being installed and discoverable.
+- Enabling `strictMcp` in interactive sessions can still hang in some environments; treat it as opt-in and smoke test before broad rollout.
 - Built-in default paths (`KNOWN_CLAUDE_PATH`, AllMind persona path, and default `mcp-none.json`) are machine-specific; use overrides (`CLAUDE_PATH`, `--persona`, `--mcp-config`) on other hosts.
 - Placeholder CI can report green while runtime regressions exist.
 
 ## Next steps
 1) Replace placeholder CI with real test execution, including Windows coverage.
 2) Define release/versioning workflow for distributing the `mercenary` CLI.
-3) Add targeted automated checks for role preset behavior (`strictMcp`, `mcpConfig`, callbacks, and output defaults).
+3) Add targeted automated checks for role preset behavior (`strictMcp`, `mcpConfig`, callbacks, and output defaults), including interactive strict-MCP opt-in behavior.
 
 ## How to get oriented fast
 - Start here: `README.md`, then `docs/specs/mercenary.md`.
