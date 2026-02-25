@@ -195,14 +195,20 @@ async function openSession(opts = {}) {
   // role: 'coordinator' → interactive observer with standard pipeline toolset + no user MCP servers
   const allowedTools = opts.allowedTools ??
     (opts.role === 'coordinator' ? 'Bash,Read,Edit,Write,Glob,Grep' : undefined);
-  const strictMcp = opts.strictMcp ?? (opts.role === 'coordinator');
+  // Coordinator sessions are interactive (visible terminal) — MCP suppression
+  // caused hangs; coordinators don't need strict MCP since they're supervised.
+  const strictMcp = opts.strictMcp ?? false;
 
   // Build launcher PowerShell script
   const lines = [
     '# Mercenary launcher -- auto-generated',
+    '$ErrorActionPreference = "Continue"',
+    'Write-Host "[mercenary] Launcher started" -ForegroundColor DarkGray',
     '$env:CLAUDECODE = $null',
     '$env:CLAUDE_CODE_ENTRYPOINT = $null',
     '$env:ANTHROPIC_API_KEY = $null',
+    // Force pwsh as shell — matches sanitizeEnv() for run() mode
+    '$env:SHELL = if ($env:PWSH_PATH) { $env:PWSH_PATH } else { "pwsh" }',
     `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "${opts.maxTokens || 65536}"`,
   ];
 
@@ -263,7 +269,32 @@ async function openSession(opts = {}) {
     claudeArgs.push(`"${opts.initialMessage.replace(/"/g, '`"')}"`);
   }
 
+  // Read system prompt / append prompt into variables to avoid inline subexpression issues
+  // and to log the content length for debugging
+  lines.push('');
+  lines.push('# Pre-load file-based args into variables');
+  if (opts.systemPrompt) {
+    const promptFile = join(tmpBase, 'system-prompt.txt');
+    lines.push(`$spContent = Get-Content "${promptFile}" -Raw`);
+    lines.push('Write-Host "[mercenary] System prompt: $($spContent.Length) chars" -ForegroundColor DarkGray');
+    // Replace the (Get-Content ...) subexpression in claudeArgs with $spContent
+    const idx = claudeArgs.findIndex(a => a.startsWith('--system-prompt'));
+    if (idx >= 0) {
+      claudeArgs[idx] = '--system-prompt $spContent';
+    }
+  }
+  if (appendSystemPrompt) {
+    const appendFile = join(tmpBase, 'append-prompt.txt');
+    lines.push(`$apContent = Get-Content "${appendFile}" -Raw`);
+    lines.push('Write-Host "[mercenary] Append prompt: $($apContent.Length) chars" -ForegroundColor DarkGray');
+    const idx = claudeArgs.findIndex(a => a.startsWith('--append-system-prompt'));
+    if (idx >= 0) {
+      claudeArgs[idx] = '--append-system-prompt $apContent';
+    }
+  }
+  lines.push('Write-Host "[mercenary] Launching claude..." -ForegroundColor DarkGray');
   lines.push(claudeArgs.join(' `\n  '));
+  lines.push('Write-Host "[mercenary] Claude exited with code $LASTEXITCODE" -ForegroundColor DarkGray');
 
   const launcherPath = join(tmpBase, 'launcher.ps1');
   writeFileSync(launcherPath, lines.join('\n'), 'utf8');
