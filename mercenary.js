@@ -37,6 +37,9 @@ function sanitizeEnv(opts = {}) {
   delete env.CLAUDECODE;
   delete env.CLAUDE_CODE_ENTRYPOINT;
   delete env.ANTHROPIC_API_KEY;
+  // Force pwsh as shell — PM2 inherits SHELL=bash.exe from Git Bash, causing
+  // spawned Claude instances to use bash instead of PowerShell for Bash tool.
+  env.SHELL = env.PWSH_PATH || 'pwsh';
   env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(opts.maxTokens || 65536);
   return env;
 }
@@ -73,6 +76,12 @@ function buildArgs(opts) {
   if (opts.role === 'pipeline' || opts.streaming) {
     args.push('--output-format', 'stream-json', '--verbose');
     args.push('--strict-mcp-config');
+    // Default to empty MCP config if caller doesn't provide one —
+    // belt-and-suspenders: --strict-mcp-config alone should suppress user MCP servers,
+    // but explicitly providing an empty config ensures zero servers even if strict has edge cases.
+    if (!opts.mcpConfig) {
+      args.push('--mcp-config', 'P:\\software\\allmind\\config\\mcp-none.json');
+    }
   } else if (opts.role === 'allmind') {
     args.push('--output-format', 'text');
   } else if (opts.outputFormat) {
@@ -203,7 +212,7 @@ async function openSession(opts = {}) {
   }
 
   // Build claude invocation args
-  const claudeArgs = [`& "${claudePath}"`, '--dangerously-skip-permissions', '--no-session-persistence'];
+  const claudeArgs = [`& "${claudePath}"`, '--dangerously-skip-permissions'];
 
   // Tool restrictions
   if (allowedTools) {
@@ -240,7 +249,13 @@ async function openSession(opts = {}) {
   }
 
   // MCP config control — suppress user MCP servers for headless/pipeline roles
-  if (strictMcp) claudeArgs.push('--strict-mcp-config');
+  if (strictMcp) {
+    claudeArgs.push('--strict-mcp-config');
+    // Default to empty MCP config if caller doesn't provide one
+    if (!opts.mcpConfig) {
+      claudeArgs.push(`--mcp-config "P:\\software\\allmind\\config\\mcp-none.json"`);
+    }
+  }
   if (opts.mcpConfig) claudeArgs.push(`--mcp-config "${opts.mcpConfig.replace(/"/g, '`"')}"`);
 
   // Initial message as positional arg
