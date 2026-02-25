@@ -67,10 +67,12 @@ function buildArgs(opts) {
   if (opts.model) args.push('--model', opts.model);
   // Role-based preset — callers declare what they are, not which flags they need.
   // role: 'pipeline' → headless agent, structured streaming output (stream-json + verbose)
+  //                     + --strict-mcp-config to suppress user MCP servers (each spawns a visible console)
   // role: 'allmind'  → AllMind-voiced session, plain text output + persona injection
   // streaming: true  → legacy alias for pipeline
   if (opts.role === 'pipeline' || opts.streaming) {
     args.push('--output-format', 'stream-json', '--verbose');
+    args.push('--strict-mcp-config');
   } else if (opts.role === 'allmind') {
     args.push('--output-format', 'text');
   } else if (opts.outputFormat) {
@@ -78,6 +80,11 @@ function buildArgs(opts) {
     if (opts.verbose) args.push('--verbose');
   }
   if (opts.maxTurns) args.push('--max-turns', String(opts.maxTurns));
+
+  // MCP config: pass --mcp-config with a JSON string or file path.
+  // Combine with --strict-mcp-config (set by pipeline role or explicitly) to load ONLY these servers.
+  if (opts.mcpConfig) args.push('--mcp-config', opts.mcpConfig);
+  if (opts.strictMcp && !args.includes('--strict-mcp-config')) args.push('--strict-mcp-config');
 
   // Persona first, then user's append-system-prompt
   // role: 'allmind' defaults to the AllMind persona path; caller can override with opts.persona
@@ -176,9 +183,10 @@ async function openSession(opts = {}) {
   const tmpBase = mkdtempSync(join(tmpdir(), 'mercenary-'));
 
   // Role-based preset — callers declare what they are, not which flags they need.
-  // role: 'coordinator' → interactive observer with standard pipeline toolset
+  // role: 'coordinator' → interactive observer with standard pipeline toolset + no user MCP servers
   const allowedTools = opts.allowedTools ??
     (opts.role === 'coordinator' ? 'Bash,Read,Edit,Write,Glob,Grep' : undefined);
+  const strictMcp = opts.strictMcp ?? (opts.role === 'coordinator');
 
   // Build launcher PowerShell script
   const lines = [
@@ -230,6 +238,10 @@ async function openSession(opts = {}) {
     writeFileSync(appendFile, appendSystemPrompt, 'utf8');
     claudeArgs.push(`--append-system-prompt (Get-Content "${appendFile}" -Raw)`);
   }
+
+  // MCP config control — suppress user MCP servers for headless/pipeline roles
+  if (strictMcp) claudeArgs.push('--strict-mcp-config');
+  if (opts.mcpConfig) claudeArgs.push(`--mcp-config "${opts.mcpConfig.replace(/"/g, '`"')}"`);
 
   // Initial message as positional arg
   if (opts.initialMessage) {
