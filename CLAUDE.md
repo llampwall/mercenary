@@ -23,10 +23,13 @@ JavaScript (Node.js 22, ESM)
 
 - Zero external dependencies. Only Node.js stdlib.
 - Single file (`mercenary.js`). No build step.
-- Always set `--dangerously-skip-permissions` and `--no-session-persistence` on spawned claude processes
+- Always set `--dangerously-skip-permissions` on spawned claude processes.
+- Set `--no-session-persistence` for one-shot `-p` launches; do not pass it to interactive session launches.
 - Always delete `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY` from child env
+- Force child `SHELL` to `pwsh` in `sanitizeEnv()` to avoid inherited `bash.exe` behavior on Windows automation hosts.
 - Use `shell: false` with resolved claude binary path (not shell lookup)
 - Use `taskkill /T /F /PID` for process tree kill on Windows
+- `pipeline` and `coordinator` strict MCP defaults should fall back to `P:\software\allmind\config\mcp-none.json` when `mcpConfig` is not provided.
 - `--am` flag reads persona from `P:\software\allmind\data\persona\allmind-voice.md`
 - When opening this repo, check if session brief shows `ACTION REQUIRED` — if so, offer to run `/update-memory`
 

@@ -3,6 +3,7 @@
 ## Quick start
 - Install: `npm install` (no external runtime deps, but keeps local npm workflow consistent).
 - Dev one-shot: `node mercenary.js --prompt "Reply with exactly: OK" --timeout 30`
+- Dev JSON one-shot: `node mercenary.js --prompt "Reply with exactly: OK" --json --timeout 30`
 - Dev interactive: `node mercenary.js --interactive --title "Mercenary"`
 - Test: `npm test` (runs `node test/mercenary.test.js`).
 - Lint: no lint command is defined in `package.json`.
@@ -14,16 +15,19 @@
 - Env var names:
   - `CLAUDE_PATH` (override Claude binary resolution).
   - `MERCENARY_INTEGRATION` (enables integration tests).
-  - `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY` (removed from child env by design).
   - `CLAUDE_CODE_MAX_OUTPUT_TOKENS` (set in child env; default `65536` unless overridden by `--max-tokens`).
-  - `.env.example` names: `SERVER_HOST`, `SERVER_PORT`, `UI_HOST`, `UI_PORT`.
+  - `PWSH_PATH` (optional custom PowerShell path used for child `SHELL` assignment).
+  - `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY` (removed from child env by design).
+  - `.env.example` names: `SERVER_HOST`, `SERVER_PORT`, `UI_HOST`, `UI_PORT` (template values only).
 - Ports:
-  - `.env.example`: server `6969`, UI `5174`.
+  - Mercenary runtime uses no network ports.
+  - `.env.example` declares server `6969` and UI `5174` as template values.
 - Common paths:
   - `mercenary.js` (single implementation file).
   - `test/mercenary.test.js` (unit/CLI/integration-gated tests).
   - `docs/specs/mercenary.md` (detailed behavior spec).
   - `P:\\software\\allmind\\data\\persona\\allmind-voice.md` (`--am` persona default).
+  - `P:\\software\\allmind\\config\\mcp-none.json` (default empty MCP config for strict automation roles when `mcpConfig` is not provided).
   - `C:\\Users\\Jordan\\.local\\bin\\claude.exe` (known local Claude path fallback).
 
 ## Environments
@@ -34,7 +38,7 @@
 ## Deployment
 - Build: none (single-file Node CLI, no transpile/bundle step).
 - Deploy: no in-repo deployment pipeline; consumed directly as a local CLI/module.
-- Rollback: `git revert` + re-run `npm test`.
+- Rollback: `git revert` + `npm test`.
 - Health checks: manual CLI smoke run and test suite.
 
 ## Data and storage
@@ -65,12 +69,16 @@
 - One-shot JSON run: `node mercenary.js --prompt "Reply with exactly: OK" --json --timeout 30`
 - Open interactive session: `node mercenary.js --interactive --system-prompt .\\prompt.txt "Begin observing."`
 - Kill an existing process tree: `node mercenary.js --kill <pid>`
+- Programmatic role preset sample:
+  - `node --input-type=module -e "import { run } from './mercenary.js'; run({ prompt: 'Reply with exactly: OK', role: 'pipeline', timeout: 30 }).then(r => console.log(r.exitCode));"`
 - Search files: `rg --files`
 - View recent commits: `git log --oneline -n 10`
 
 ## Deprecations and gotchas
 - Keep `shell: false` for the main Claude process spawn path in `mercenary.js`.
 - Interactive mode requires both Windows Terminal (`wt`) and PowerShell (`pwsh`).
+- `--no-session-persistence` is used in one-shot (`run`) launches; interactive sessions intentionally omit it.
+- CLI parser ignores unknown flags; several options are module-only today (`role`, `streaming`, `strictMcp`, `mcpConfig`, `onStart`, `onData`).
 - `pipeline` and `coordinator` presets intentionally default to strict MCP isolation.
 - Line endings are LF by default; only `.bat`/`.cmd` use CRLF.
 - Do not store secrets in repo notes or committed env files; document env var names only.
