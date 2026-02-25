@@ -147,3 +147,29 @@
   - Teams must document when interactive strict mode is actually required.
 
 **Status:** Active
+
+### ADR-006: Interactive sessions must isolate child temp directories (2026-02-24)
+
+**Context:**
+- Concurrent interactive/coordinator sessions could fail with intermittent `EINVAL` errors while writing temp artifacts.
+- Shared temp targets across concurrent sessions created path/handle collisions in the Claude subprocess workflow.
+
+**Constraint:**
+- `openSession()` MUST set child `TEMP` and `TMP` to a per-session unique directory.
+- Interactive sessions MUST NOT rely on shared project-level temp paths for Claude child temp output.
+
+**Decision:**
+- Reuse the already-created per-session `mkdtemp` directory as `TEMP` and `TMP` in the generated interactive launcher script.
+
+**Alternatives:**
+- Keep inherited/shared temp paths -> rejected because collisions still occur under concurrent sessions.
+- Add retry-only behavior without isolation -> rejected because retries mask contention but do not remove root cause.
+
+**Consequences:**
+- Benefits:
+  - Reduces cross-session temp artifact contention and `EINVAL` failures.
+  - Keeps session artifacts isolated for easier debugging.
+- Trade-offs:
+  - Interactive sessions create additional temp directories that require periodic cleanup.
+
+**Status:** Active

@@ -18,6 +18,7 @@
 - Working: one-shot `pipeline` preset enforces strict MCP isolation and defaults `--mcp-config` to `P:\\software\\allmind\\config\\mcp-none.json` when no config is provided.
 - Working: interactive mode (`openSession()` / `--interactive`) launches Windows Terminal via generated PowerShell launcher script with startup diagnostics.
 - Working: interactive prompt payloads are loaded from temp files into PowerShell variables before launch to avoid inline subexpression parsing issues.
+- Working: interactive launches isolate child `TEMP`/`TMP` to each session `mkdtemp` directory to prevent cross-session temp-file collisions (`EINVAL` class failures).
 - Working: role-based presets (`pipeline`, `allmind`, `coordinator`) are implemented.
 - Working: child env sanitization strips nested-session/auth vars and forces `SHELL=pwsh` for Windows consistency.
 - Fragile: CI is placeholder-only and does not execute tests.
@@ -49,17 +50,20 @@
 - ADR-002: Windows-safe automation invocation and newline policy are mandatory.
 - ADR-003: Mercenary remains a Windows-first single-file wrapper with mode-specific launch flags and required env sanitization.
 - ADR-005: `pipeline` defaults to strict MCP isolation; interactive sessions require explicit strict-MCP opt-in.
+- ADR-006: Interactive sessions must isolate child `TEMP`/`TMP` to per-session directories.
 
 ## Known hazards
 - `--interactive` depends on `wt` and `pwsh` being installed and discoverable.
 - Enabling `strictMcp` in interactive sessions can still hang in some environments; treat it as opt-in and smoke test before broad rollout.
 - Built-in default paths (`KNOWN_CLAUDE_PATH`, AllMind persona path, and default `mcp-none.json`) are machine-specific; use overrides (`CLAUDE_PATH`, `--persona`, `--mcp-config`) on other hosts.
 - Placeholder CI can report green while runtime regressions exist.
+- Interactive sessions currently do not prune their per-session `mercenary-*` temp directories automatically.
 
 ## Next steps
 1) Replace placeholder CI with real test execution, including Windows coverage.
 2) Define release/versioning workflow for distributing the `mercenary` CLI.
 3) Add targeted automated checks for role preset behavior (`strictMcp`, `mcpConfig`, callbacks, and output defaults), including interactive strict-MCP opt-in behavior.
+4) Add a cleanup strategy for stale per-session temp directories created by interactive mode.
 
 ## How to get oriented fast
 - Start here: `README.md`, then `docs/specs/mercenary.md`.

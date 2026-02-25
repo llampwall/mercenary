@@ -88,3 +88,12 @@ Project notes are updated automatically by a post-commit maintainer (triggered b
 - If details belong elsewhere, link to `adrs.md`, `bugs.md`, or `key_facts.md`.
 - `operating_brief.md` is curated (rewrite allowed). Keep it short.
 - If no meaningful doc changes are needed, say `No project_notes updates needed for this change.`
+
+### Meaningful commits (what triggers the maintainer)
+
+Treat a commit as meaningful if it changes behavior, data shape, interfaces, build/deploy wiring, or fixes a non-trivial bug.
+Do NOT treat these as meaningful:
+- docs-only changes (including `docs/project_notes/*`, `AGENTS.md`, `CLAUDE.md`)
+- formatting/lint-only churn
+- merges
+- commit messages prefixed with `docs:` or `notes:`

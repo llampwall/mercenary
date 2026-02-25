@@ -19,3 +19,8 @@
 - **Outcome:** Interactive launcher added startup/prompt/exit diagnostics and switched prompt passing to variable-based file loading to avoid inline subexpression parsing failures.
 - **Why:** Improved failure visibility and reduced false negatives where sessions appeared to launch but did not execute prompt payloads correctly.
 - **Links:** `ea91304`, `docs/project_notes/bugs.md` (interactive strict MCP hang)
+
+### 2026-02-24 - Interactive sessions now isolate child temp directories
+- **Outcome:** `openSession()` now sets child `TEMP` and `TMP` to each session's own `mkdtemp` workspace instead of reusing a shared temp target.
+- **Why:** Prevented cross-session temp-file collisions that produced intermittent `EINVAL` failures during concurrent interactive/coordinator runs.
+- **Links:** `794fdfa`, `docs/project_notes/bugs.md` (interactive EINVAL failures from shared temp paths)

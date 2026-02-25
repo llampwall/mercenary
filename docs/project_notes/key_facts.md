@@ -18,6 +18,7 @@
   - `MERCENARY_INTEGRATION` (enables integration tests).
   - `CLAUDE_CODE_MAX_OUTPUT_TOKENS` (set in child env; default `65536` unless overridden by `--max-tokens`).
   - `PWSH_PATH` (optional custom PowerShell path used for child `SHELL` assignment).
+  - `TEMP`, `TMP` (interactive mode sets both to a per-session temp directory for Claude child process isolation).
   - `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY` (removed from child env by design).
   - `.env.example` names: `SERVER_HOST`, `SERVER_PORT`, `UI_HOST`, `UI_PORT` (template values only).
 - Ports:
@@ -30,6 +31,7 @@
   - `P:\\software\\allmind\\data\\persona\\allmind-voice.md` (`--am` persona default).
   - `P:\\software\\allmind\\config\\mcp-none.json` (default empty MCP config for strict automation roles when `mcpConfig` is not provided).
   - `C:\\Users\\Jordan\\.local\\bin\\claude.exe` (known local Claude path fallback).
+  - `%TEMP%\\mercenary-*` (per-session launcher/prompt directory created by `openSession()` and reused as child `TEMP`/`TMP`).
 
 ## Environments
 - Dev: Windows host with `pwsh`, `wt`, and Claude CLI installed.
@@ -82,6 +84,7 @@
 - CLI parser ignores unknown flags; several options are module-only today (`role`, `streaming`, `strictMcp`, `mcpConfig`, `onStart`, `onData`).
 - `pipeline` preset intentionally defaults to strict MCP isolation with `mcp-none.json` fallback when `mcpConfig` is not provided.
 - Interactive sessions default `strictMcp` to `false`; strict MCP in interactive mode is explicit opt-in and should be smoke-tested.
+- Interactive sessions intentionally isolate child `TEMP`/`TMP`; avoid overriding these values to shared paths in wrapper scripts.
 - Line endings are LF by default; only `.bat`/`.cmd` use CRLF.
 - Do not store secrets in repo notes or committed env files; document env var names only.
 
