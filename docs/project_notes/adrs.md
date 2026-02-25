@@ -58,3 +58,60 @@
   - Contributors must follow stricter execution/editing discipline.
 
 **Status:** Active
+
+### ADR-003: Keep mercenary as a Windows-first single-file wrapper (2026-02-24)
+
+**Context:**
+- The repo was created to centralize Claude subprocess management behavior for downstream consumers.
+- Divergent spawn behavior across tools causes recurring reliability issues.
+
+**Constraint:**
+- Core implementation MUST remain in `mercenary.js` as a dependency-free Node.js module/CLI.
+- All Claude launches MUST include `--dangerously-skip-permissions` and `--no-session-persistence`.
+- Child env MUST remove `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, and `ANTHROPIC_API_KEY`.
+- Timeout and external termination MUST use process-tree kill (`taskkill /T /F /PID`).
+
+**Decision:**
+- Keep the public surface centered on `run`, `openSession`, `treeKill`, and `resolveClaudePath` in one file.
+
+**Alternatives:**
+- Split logic into multiple packages/modules -> rejected due extra packaging overhead and drift risk for a small core wrapper.
+- Make safety flags/env sanitization optional -> rejected because downstream consistency depends on mandatory defaults.
+
+**Consequences:**
+- Benefits:
+  - One stable subprocess primitive for all consumers.
+  - Simple vendoring/import path and fewer dependency vulnerabilities.
+- Trade-offs:
+  - Internal modularity is lower than a multi-file design.
+  - Implementation remains explicitly Windows-specific.
+
+**Status:** Active
+
+### ADR-004: Default automation roles to strict MCP isolation (2026-02-24)
+
+**Context:**
+- Pipeline and coordinator runs were auto-loading user MCP servers, causing large bursts of visible subprocess windows.
+- Automation roles need predictable headless behavior without inheriting user-local MCP fan-out.
+
+**Constraint:**
+- `role: "pipeline"` MUST include strict MCP mode by default.
+- `role: "coordinator"` MUST default `strictMcp` to `true`.
+- MCP servers used by automation MUST be explicitly selected via `mcpConfig`.
+- Any strict-mode opt-out MUST be intentional at the call site.
+
+**Decision:**
+- Encode strict MCP defaults in role presets (`buildArgs()` and `openSession()`), with explicit override options (`strictMcp`, `mcpConfig`).
+
+**Alternatives:**
+- Disable MCP globally for all roles -> rejected because some workflows need curated MCP servers.
+- Keep strict mode opt-in only -> rejected because default behavior repeatedly caused noisy subprocess storms.
+
+**Consequences:**
+- Benefits:
+  - Prevents broad MCP subprocess fan-out in automation.
+  - Makes MCP usage explicit and reproducible.
+- Trade-offs:
+  - Callers must provide `mcpConfig` when they need selective MCP access.
+
+**Status:** Active

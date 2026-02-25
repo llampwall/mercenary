@@ -28,6 +28,7 @@ JavaScript (Node.js 22, ESM)
 - Use `shell: false` with resolved claude binary path (not shell lookup)
 - Use `taskkill /T /F /PID` for process tree kill on Windows
 - `--am` flag reads persona from `P:\software\allmind\data\persona\allmind-voice.md`
+- When opening this repo, check if session brief shows `ACTION REQUIRED` — if so, offer to run `/update-memory`
 
 ## Commands
 
@@ -64,7 +65,9 @@ Project notes are updated automatically by a post-commit maintainer (triggered b
 **After completing meaningful work (ready to keep):**
 - Verify the change (run relevant tests / quick sanity checks).
 - If the user has approved the change (or you are confident it is correct and intended), commit the work using `$git-commit-helper`.
-- Ownership: the main coding agent should **not** edit `docs/project_notes/*` directly; only the post-commit maintainer edits those files (unless user explicitly requests manual edits).
+- Ownership:
+- The main coding agent should **not** edit `docs/project_notes/*` directly.
+- Only the post-commit maintainer edits those files (unless user explicitly requests manual edits).
 
 **If work appears complete but is not yet approved:**
 - Ask the user if they want to commit now.

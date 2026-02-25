@@ -1,62 +1,79 @@
 # Key Facts
 
 ## Quick start
-- Install: no package/runtime manifest is committed yet (`package.json`, `pyproject.toml`, `go.mod`, and similar files are absent).
-- Dev: no project dev command is defined yet.
-- Test: no project test command is defined yet.
-- Lint: no project lint command is defined yet.
+- Install: `npm install` (no external runtime deps, but keeps local npm workflow consistent).
+- Dev one-shot: `node mercenary.js --prompt "Reply with exactly: OK" --timeout 30`
+- Dev interactive: `node mercenary.js --interactive --title "Mercenary"`
+- Test: `npm test` (runs `node test/mercenary.test.js`).
+- Lint: no lint command is defined in `package.json`.
 
 ## Local development
-- Runtime: not selected yet.
-- Package manager: not selected yet.
-- Env var names (`.env.example`): `SERVER_HOST`, `SERVER_PORT`, `UI_HOST`, `UI_PORT`.
-- Ports (`.env.example`): server `6969`, UI `5174`.
+- Runtime: Node.js `>=22` (`package.json` engines).
+- Package manager: npm.
+- Module format: ESM (`"type": "module"`).
+- Env var names:
+  - `CLAUDE_PATH` (override Claude binary resolution).
+  - `MERCENARY_INTEGRATION` (enables integration tests).
+  - `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY` (removed from child env by design).
+  - `CLAUDE_CODE_MAX_OUTPUT_TOKENS` (set in child env; default `65536` unless overridden by `--max-tokens`).
+  - `.env.example` names: `SERVER_HOST`, `SERVER_PORT`, `UI_HOST`, `UI_PORT`.
+- Ports:
+  - `.env.example`: server `6969`, UI `5174`.
 - Common paths:
-  - `scripts/` and `tools/` for automation code.
-  - `logs/` for runtime logs (gitignored except `.keep`).
-  - `docs/project_notes/` for canonical project memory.
+  - `mercenary.js` (single implementation file).
+  - `test/mercenary.test.js` (unit/CLI/integration-gated tests).
+  - `docs/specs/mercenary.md` (detailed behavior spec).
+  - `P:\\software\\allmind\\data\\persona\\allmind-voice.md` (`--am` persona default).
+  - `C:\\Users\\Jordan\\.local\\bin\\claude.exe` (known local Claude path fallback).
 
 ## Environments
-- Local/dev configuration is expected through `.env` / `.env.*` files (`.gitignore` excludes them).
-- Staging and production targets are not declared in the repository yet.
+- Dev: Windows host with `pwsh`, `wt`, and Claude CLI installed.
+- Staging: not defined in this repository.
+- Production: not defined in this repository.
 
 ## Deployment
-- Build pipeline: not implemented yet.
-- Deploy process: not implemented yet.
-- Rollback process: not documented yet.
-- Health checks: not implemented yet.
+- Build: none (single-file Node CLI, no transpile/bundle step).
+- Deploy: no in-repo deployment pipeline; consumed directly as a local CLI/module.
+- Rollback: `git revert` + re-run `npm test`.
+- Health checks: manual CLI smoke run and test suite.
 
 ## Data and storage
-- Primary datastore: none declared yet.
-- Object storage: none declared yet.
-- Backup strategy: none declared yet.
+- Primary datastore: none.
+- Object storage: none.
+- Backups: git history only.
 
 ## External services
-- Current external integration: GitHub Actions CI via `.github/workflows/ci.yml`.
-- API endpoints: none declared yet.
-- Service identities: none declared yet.
+- GitHub Actions workflow: `.github/workflows/ci.yml` (placeholder sanity job).
+- Claude CLI executable: resolved via `CLAUDE_PATH`, then known path fallback, then `where.exe claude`.
+- AllMind integration: Mercenary provides spawn primitives; API routes live in AllMind, not this repo.
 
 ## Observability
-- Logs: local logs written under `logs/` (directory ignored by default).
-- Metrics: none declared yet.
-- Alerts: none declared yet.
+- Runtime output: stdout/stderr from spawned Claude process.
+- Local logs directory: `logs/` (gitignored except `logs/.keep`).
+- Metrics: none implemented.
+- Alerts: none implemented.
 
 ## Repo map
-- `.`: root contains repo policy files, placeholder CI, and docs scaffolding.
-- `docs/project_notes/`: canonical notes (`operating_brief.md`, `key_facts.md`, `adrs.md`, `bugs.md`, `worklog.md`).
-- `docs/memory/`: legacy notes from older format; treat as non-canonical unless migrated.
-- `.github/workflows/ci.yml`: CI placeholder.
+- `.`: Node CLI/module repo with one source file and tests.
+- `docs/project_notes/`: canonical memory notes.
+- `docs/memory/`: legacy notes; non-canonical unless explicitly migrated.
+- `scripts/` and `tools/`: required location for automation scripts.
+- `.github/workflows/ci.yml`: placeholder CI workflow.
 
 ## Operational commands
-- List root files: `Get-ChildItem -Force -Name`
-- Search files quickly: `rg --files`
-- View recent commit(s): `git log --oneline -n 10`
-- On Windows, if a `.ps1` sibling exists, run it with: `pwsh -File scripts\\task.ps1`
+- Run tests: `npm test`
+- One-shot JSON run: `node mercenary.js --prompt "Reply with exactly: OK" --json --timeout 30`
+- Open interactive session: `node mercenary.js --interactive --system-prompt .\\prompt.txt "Begin observing."`
+- Kill an existing process tree: `node mercenary.js --kill <pid>`
+- Search files: `rg --files`
+- View recent commits: `git log --oneline -n 10`
 
 ## Deprecations and gotchas
-- Line endings are LF by default (`.editorconfig`, `.gitattributes`); only `.bat` and `.cmd` should use CRLF.
-- Avoid ad-hoc Python/regex newline replacement edits; edit multiline content directly and verify.
-- Do not store secrets in repo notes or committed env files; only env var names belong here.
+- Keep `shell: false` for the main Claude process spawn path in `mercenary.js`.
+- Interactive mode requires both Windows Terminal (`wt`) and PowerShell (`pwsh`).
+- `pipeline` and `coordinator` presets intentionally default to strict MCP isolation.
+- Line endings are LF by default; only `.bat`/`.cmd` use CRLF.
+- Do not store secrets in repo notes or committed env files; document env var names only.
 
 ## Linkouts
 - Operating brief: `docs/project_notes/operating_brief.md`
