@@ -210,6 +210,10 @@ async function openSession(opts = {}) {
     // Force pwsh as shell — matches sanitizeEnv() for run() mode
     '$env:SHELL = if ($env:PWSH_PATH) { $env:PWSH_PATH } else { "pwsh" }',
     `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "${opts.maxTokens || 65536}"`,
+    // Give each interactive session its own temp dir to avoid EINVAL collisions
+    // with other Claude sessions sharing the same project temp path
+    `$env:TEMP = "${tmpBase}"`,
+    `$env:TMP = "${tmpBase}"`,
   ];
 
   // Set working directory before launching claude
