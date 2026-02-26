@@ -37,9 +37,10 @@ function sanitizeEnv(opts = {}) {
   delete env.CLAUDECODE;
   delete env.CLAUDE_CODE_ENTRYPOINT;
   delete env.ANTHROPIC_API_KEY;
-  // Force pwsh as shell — PM2 inherits SHELL=bash.exe from Git Bash, causing
-  // spawned Claude instances to use bash instead of PowerShell for Bash tool.
-  env.SHELL = env.PWSH_PATH || 'pwsh';
+  // Claude Code's Bash tool on Windows requires SHELL to point at Git Bash.
+  // Setting SHELL=pwsh causes EINVAL on output files; leaving it unset also breaks.
+  // PM2 used to inherit SHELL=bash.exe but that was removed — set it explicitly.
+  env.SHELL = 'C:\\Program Files\\Git\\bin\\bash.exe';
   env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(opts.maxTokens || 65536);
   return env;
 }
@@ -70,18 +71,14 @@ function buildArgs(opts) {
   if (opts.model) args.push('--model', opts.model);
   // Role-based preset — callers declare what they are, not which flags they need.
   // role: 'pipeline' → headless agent, structured streaming output (stream-json + verbose)
-  //                     + --strict-mcp-config to suppress user MCP servers (each spawns a visible console)
+  //                     + --strict-mcp-config to block project-level .mcp.json (global mcpServers is empty)
   // role: 'allmind'  → AllMind-voiced session, plain text output + persona injection
   // streaming: true  → legacy alias for pipeline
   if (opts.role === 'pipeline' || opts.streaming) {
     args.push('--output-format', 'stream-json', '--verbose');
     args.push('--strict-mcp-config');
-    // Default to empty MCP config if caller doesn't provide one —
-    // belt-and-suspenders: --strict-mcp-config alone should suppress user MCP servers,
-    // but explicitly providing an empty config ensures zero servers even if strict has edge cases.
-    if (!opts.mcpConfig) {
-      args.push('--mcp-config', 'P:\\software\\allmind\\config\\mcp-none.json');
-    }
+    // --strict-mcp-config blocks project-level .mcp.json from loading.
+    // No mcp-none.json fallback needed — global mcpServers is empty by design.
   } else if (opts.role === 'allmind') {
     args.push('--output-format', 'text');
   } else if (opts.outputFormat) {
@@ -207,13 +204,15 @@ async function openSession(opts = {}) {
     '$env:CLAUDECODE = $null',
     '$env:CLAUDE_CODE_ENTRYPOINT = $null',
     '$env:ANTHROPIC_API_KEY = $null',
-    // Force pwsh as shell — matches sanitizeEnv() for run() mode
-    '$env:SHELL = if ($env:PWSH_PATH) { $env:PWSH_PATH } else { "pwsh" }',
+    // Claude Code's Bash tool needs SHELL pointing at Git Bash — not pwsh, not unset.
+    // Clear PSModulePath and PSHOME so Claude Code can't detect it's running inside a
+    // PowerShell session and auto-switch SHELL to pwsh (which causes EINVAL on output files).
+    '$env:PSModulePath = $null',
+    '$env:PSHOME = $null',
+    '$env:SHELL = "C:\\Program Files\\Git\\bin\\bash.exe"',
+    // Ensure git bash dirs are on PATH so Claude Code can resolve bash.exe via PATH lookup too.
+    '$env:PATH = "C:\\Program Files\\Git\\bin;C:\\Program Files\\Git\\usr\\bin;" + $env:PATH',
     `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "${opts.maxTokens || 65536}"`,
-    // Give each interactive session its own temp dir to avoid EINVAL collisions
-    // with other Claude sessions sharing the same project temp path
-    `$env:TEMP = "${tmpBase}"`,
-    `$env:TMP = "${tmpBase}"`,
   ];
 
   // Set working directory before launching claude
@@ -258,13 +257,10 @@ async function openSession(opts = {}) {
     claudeArgs.push(`--append-system-prompt (Get-Content "${appendFile}" -Raw)`);
   }
 
-  // MCP config control — suppress user MCP servers for headless/pipeline roles
+  // MCP config control — block project-level .mcp.json for headless/pipeline roles
+  // No mcp-none.json fallback needed — global mcpServers is empty by design.
   if (strictMcp) {
     claudeArgs.push('--strict-mcp-config');
-    // Default to empty MCP config if caller doesn't provide one
-    if (!opts.mcpConfig) {
-      claudeArgs.push(`--mcp-config "P:\\software\\allmind\\config\\mcp-none.json"`);
-    }
   }
   if (opts.mcpConfig) claudeArgs.push(`--mcp-config "${opts.mcpConfig.replace(/"/g, '`"')}"`);
 
