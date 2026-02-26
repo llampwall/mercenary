@@ -29,7 +29,7 @@ JavaScript (Node.js 22, ESM)
 - Force child `SHELL` to `pwsh` in `sanitizeEnv()` to avoid inherited `bash.exe` behavior on Windows automation hosts.
 - Use `shell: false` with resolved claude binary path (not shell lookup)
 - Use `taskkill /T /F /PID` for process tree kill on Windows
-- `pipeline` defaults to strict MCP isolation and falls back to `P:\software\allmind\config\mcp-none.json` when `mcpConfig` is not provided.
+- `pipeline` defaults to strict MCP isolation via `--strict-mcp-config`; no hardcoded `mcp-none.json` fallback is injected.
 - Interactive sessions default `strictMcp` to `false`; strict MCP in interactive mode must be explicitly opted in.
 - `--am` flag reads persona from `P:\software\allmind\data\persona\allmind-voice.md`
 - When opening this repo, check if session brief shows `ACTION REQUIRED` — if so, offer to run `/update-memory`
@@ -81,6 +81,14 @@ Project notes are updated automatically by a post-commit maintainer (triggered b
 **Notes update policy:**
 - `docs/project_notes/*` is maintained automatically after meaningful commits.
 - If no meaningful notes updates are needed, the maintainer will leave them unchanged.
+
+### Checkpoint Mode (Default)
+
+- Run the maintainer only after `git commit` (or a manual checkpoint command).
+- Prefer commit-backed inputs (`git show -1` plus commit message context) when deciding note edits.
+- Ignore uncommitted churn.
+- Prefer editing existing entries over appending noise.
+- If nothing meaningful changed, make no notes edits.
 
 ### Anti-Redundancy Rules
 
