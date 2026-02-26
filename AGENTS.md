@@ -52,6 +52,14 @@ Project notes are updated automatically by a post-commit maintainer (triggered b
 - `docs/project_notes/*` is maintained automatically after meaningful commits.
 - If no meaningful notes updates are needed, the maintainer will leave them unchanged.
 
+### Checkpoint Mode (Default)
+
+- Run the maintainer only after `git commit` (or a manual checkpoint command).
+- Prefer commit-backed inputs (`git show -1` plus commit message context) when deciding note edits.
+- Ignore uncommitted churn.
+- Prefer editing existing entries over appending noise.
+- If nothing meaningful changed, make no notes edits.
+
 ### Anti-Redundancy Rules
 
 - `worklog.md` must not duplicate ADR rationale, bug writeups, or key facts.
