@@ -37,10 +37,7 @@ function sanitizeEnv(opts = {}) {
   delete env.CLAUDECODE;
   delete env.CLAUDE_CODE_ENTRYPOINT;
   delete env.ANTHROPIC_API_KEY;
-  // Claude Code's Bash tool on Windows requires SHELL to point at Git Bash.
-  // Setting SHELL=pwsh causes EINVAL on output files; leaving it unset also breaks.
-  // PM2 used to inherit SHELL=bash.exe but that was removed — set it explicitly.
-  env.SHELL = 'C:\\Program Files\\Git\\bin\\bash.exe';
+  env.SHELL = 'C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe';
   env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(opts.maxTokens || 65536);
   return env;
 }
@@ -204,14 +201,7 @@ async function openSession(opts = {}) {
     '$env:CLAUDECODE = $null',
     '$env:CLAUDE_CODE_ENTRYPOINT = $null',
     '$env:ANTHROPIC_API_KEY = $null',
-    // Claude Code's Bash tool needs SHELL pointing at Git Bash — not pwsh, not unset.
-    // Clear PSModulePath and PSHOME so Claude Code can't detect it's running inside a
-    // PowerShell session and auto-switch SHELL to pwsh (which causes EINVAL on output files).
-    '$env:PSModulePath = $null',
-    '$env:PSHOME = $null',
-    '$env:SHELL = "C:\\Program Files\\Git\\bin\\bash.exe"',
-    // Ensure git bash dirs are on PATH so Claude Code can resolve bash.exe via PATH lookup too.
-    '$env:PATH = "C:\\Program Files\\Git\\bin;C:\\Program Files\\Git\\usr\\bin;" + $env:PATH',
+    '$env:SHELL = "C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe"',
     `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "${opts.maxTokens || 65536}"`,
   ];
 
