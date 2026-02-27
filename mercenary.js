@@ -30,6 +30,21 @@ function resolveClaudePath() {
   throw new Error('claude binary not found. Set CLAUDE_PATH or ensure claude is installed.');
 }
 
+function resolveCodexPath() {
+  if (process.env.CODEX_PATH) {
+    if (existsSync(process.env.CODEX_PATH)) return process.env.CODEX_PATH;
+    throw new Error(`CODEX_PATH set to "${process.env.CODEX_PATH}" but file not found.`);
+  }
+  try {
+    const result = execSync('where.exe codex', {
+      windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']
+    });
+    const found = result.trim().split(/\r?\n/)[0].trim();
+    if (found && existsSync(found)) return found;
+  } catch { /* not in PATH */ }
+  throw new Error('codex binary not found. Set CODEX_PATH or run: npm install -g @openai/codex');
+}
+
 // --- Environment Sanitization ---
 
 function sanitizeEnv(opts = {}) {
@@ -39,6 +54,17 @@ function sanitizeEnv(opts = {}) {
   delete env.ANTHROPIC_API_KEY;
   env.SHELL = 'C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe';
   env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(opts.maxTokens || 65536);
+  return env;
+}
+
+function sanitizeEnvCodex(opts = {}) {
+  const env = { ...process.env };
+  delete env.CLAUDECODE;
+  delete env.CLAUDE_CODE_ENTRYPOINT;
+  delete env.ANTHROPIC_API_KEY;
+  delete env.CLAUDE_CODE_MAX_OUTPUT_TOKENS;
+  env.SHELL = 'C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe';
+  // CODEX_API_KEY and OPENAI_API_KEY are preserved — codex needs them
   return env;
 }
 
@@ -107,29 +133,72 @@ function buildArgs(opts) {
   return args;
 }
 
+// --- Arg Builder (codex one-shot) ---
+
+function buildCodexArgs(opts, warn = (msg) => process.stderr.write(`mercenary: ${msg}\n`)) {
+  // codex exec [flags] "prompt"
+  const args = [
+    '--dangerously-bypass-approvals-and-sandbox',
+    '--ephemeral',
+  ];
+
+  if (opts.model) args.push('--model', opts.model);
+
+  if (opts.role === 'pipeline' || opts.streaming) {
+    args.push('--json');
+  }
+
+  // System prompt injection via --config developer_instructions
+  // File-based persona not supported; appendSystemPrompt text only
+  if (opts.persona) {
+    warn('persona injection for codex backend uses appendSystemPrompt text only; file-based persona is not supported');
+  }
+  if (opts.appendSystemPrompt) {
+    args.push('--config', `developer_instructions=${opts.appendSystemPrompt}`);
+  }
+
+  // Unsupported features — warn and skip
+  if (opts.maxTurns) warn('maxTurns is not supported by the codex backend and will be ignored');
+  if (opts.allowedTools) warn('allowedTools is not supported by the codex backend and will be ignored');
+  // mcpConfig / strictMcp — not applicable to codex, skip silently
+
+  // Prompt is positional, last
+  args.push(opts.prompt);
+
+  return args;
+}
+
 // --- One-shot Mode ---
 
 function run(opts = {}) {
   return new Promise((resolve, reject) => {
-    let claudePath;
+    if (!opts.prompt) return reject(new Error('prompt is required'));
+
+    const backend = opts.backend || 'claude';
+    let binaryPath, spawnArgs, env;
     try {
-      claudePath = resolveClaudePath();
+      if (backend === 'codex') {
+        binaryPath = resolveCodexPath();
+        spawnArgs = ['exec', ...buildCodexArgs(opts)];
+        env = sanitizeEnvCodex(opts);
+      } else {
+        binaryPath = resolveClaudePath();
+        spawnArgs = ['-p', ...buildArgs(opts), opts.prompt];
+        env = sanitizeEnv(opts);
+      }
     } catch (err) {
       return reject(err);
     }
 
-    if (!opts.prompt) return reject(new Error('prompt is required'));
-
-    const args = ['-p', ...buildArgs(opts), opts.prompt];
     const startTime = Date.now();
 
-    const proc = spawn(claudePath, args, {
+    const proc = spawn(binaryPath, spawnArgs, {
       cwd: opts.cwd || process.cwd(),
       shell: false,
       windowsHide: true,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: sanitizeEnv(opts)
+      env
     });
     proc.unref();
 
@@ -180,10 +249,61 @@ function run(opts = {}) {
 
 // --- Interactive Mode ---
 
+async function openSessionCodex(opts, title, tmpBase) {
+  const codexPath = resolveCodexPath();
+
+  const lines = [
+    '# Mercenary codex launcher -- auto-generated',
+    '$ErrorActionPreference = "Continue"',
+    'Write-Host "[mercenary] Codex launcher started" -ForegroundColor DarkGray',
+    '$env:CLAUDECODE = $null',
+    '$env:CLAUDE_CODE_ENTRYPOINT = $null',
+    '$env:ANTHROPIC_API_KEY = $null',
+    '$env:SHELL = "C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe"',
+  ];
+
+  if (opts.cwd) {
+    lines.push(`Set-Location "${opts.cwd.replace(/"/g, '`"')}"`);
+  }
+
+  const codexArgs = [`& "${codexPath}"`];
+  if (opts.model) codexArgs.push(`-m "${opts.model}"`);
+  if (opts.initialMessage) {
+    codexArgs.push(`"${opts.initialMessage.replace(/"/g, '`"')}"`);
+  }
+
+  lines.push('Write-Host "[mercenary] Launching codex..." -ForegroundColor DarkGray');
+  lines.push(codexArgs.join(' `\n  '));
+  lines.push('Write-Host "[mercenary] Codex exited with code $LASTEXITCODE" -ForegroundColor DarkGray');
+
+  const launcherPath = join(tmpBase, 'launcher-codex.ps1');
+  writeFileSync(launcherPath, lines.join('\n'), 'utf8');
+
+  const wtArgs = ['-w', '0', 'nt', '--title', title];
+  if (opts.cwd) wtArgs.push('-d', opts.cwd);
+  wtArgs.push('pwsh', '-NoProfile', '-NoExit', '-File', launcherPath);
+
+  const proc = spawn('wt', wtArgs, {
+    detached: true,
+    stdio: 'ignore',
+    shell: false,
+    windowsHide: false
+  });
+  proc.unref();
+
+  return { pid: proc.pid, title, launcherPath };
+}
+
 async function openSession(opts = {}) {
-  const claudePath = resolveClaudePath();
+  const backend = opts.backend || 'claude';
   const title = opts.title || 'Mercenary';
   const tmpBase = mkdtempSync(join(tmpdir(), 'mercenary-'));
+
+  if (backend === 'codex') {
+    return openSessionCodex(opts, title, tmpBase);
+  }
+
+  const claudePath = resolveClaudePath();
 
   // Role-based preset — callers declare what they are, not which flags they need.
   // role: 'coordinator' → interactive observer with standard pipeline toolset + no user MCP servers
@@ -315,7 +435,8 @@ function parseArgs(argv) {
   const valueFlags = new Set([
     '--prompt', '--timeout', '--allowed-tools', '--max-tokens',
     '--persona', '--model', '--output-format', '--append-system-prompt',
-    '--max-turns', '--cwd', '--system-prompt', '--title', '--kill'
+    '--max-turns', '--cwd', '--system-prompt', '--title', '--kill',
+    '--backend'
   ]);
 
   let i = 0;
@@ -367,6 +488,7 @@ async function main() {
       title: opts.title,
       maxTokens: opts.maxTokens ? Number(opts.maxTokens) : undefined,
       appendSystemPrompt: opts.appendSystemPrompt,
+      backend: opts.backend,
     });
 
     console.log(result.pid);
@@ -386,6 +508,7 @@ async function main() {
       appendSystemPrompt: opts.appendSystemPrompt,
       maxTurns: opts.maxTurns ? Number(opts.maxTurns) : undefined,
       cwd: opts.cwd,
+      backend: opts.backend,
     });
 
     if (opts.json) {
@@ -400,8 +523,8 @@ async function main() {
   }
 
   // No mode specified
-  console.error('Usage: mercenary --prompt <text> [--timeout <s>] [--json]');
-  console.error('       mercenary --interactive [--system-prompt <path>]');
+  console.error('Usage: mercenary --prompt <text> [--backend claude|codex] [--timeout <s>] [--json]');
+  console.error('       mercenary --interactive [--backend claude|codex] [--system-prompt <path>]');
   console.error('       mercenary --kill <pid>');
   process.exit(1);
 }
@@ -414,4 +537,4 @@ if (resolve(process.argv[1]) === resolve(import.meta.filename)) {
   });
 }
 
-export { run, openSession, treeKill, resolveClaudePath };
+export { run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnvCodex, buildCodexArgs, parseArgs };

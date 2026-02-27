@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 // Import module exports
-import { run, openSession, treeKill, resolveClaudePath } from '../mercenary.js';
+import { run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnvCodex, buildCodexArgs, parseArgs } from '../mercenary.js';
 
 const MERCENARY = join(import.meta.dirname, '..', 'mercenary.js');
 
@@ -65,6 +65,148 @@ describe('resolveClaudePath', () => {
   });
 });
 
+describe('resolveCodexPath', () => {
+  it('uses CODEX_PATH when set to an existing file', () => {
+    const original = process.env.CODEX_PATH;
+    try {
+      // Reuse claudePath as a stand-in for an existing file
+      const claudePath = resolveClaudePath();
+      process.env.CODEX_PATH = claudePath;
+      const p = resolveCodexPath();
+      assert.equal(p, claudePath);
+    } finally {
+      if (original) process.env.CODEX_PATH = original;
+      else delete process.env.CODEX_PATH;
+    }
+  });
+
+  it('throws when CODEX_PATH points to a nonexistent file', () => {
+    const original = process.env.CODEX_PATH;
+    try {
+      process.env.CODEX_PATH = 'C:\\nonexistent\\codex.exe';
+      assert.throws(() => resolveCodexPath(), /CODEX_PATH/);
+    } finally {
+      if (original) process.env.CODEX_PATH = original;
+      else delete process.env.CODEX_PATH;
+    }
+  });
+});
+
+describe('sanitizeEnvCodex', () => {
+  it('strips Claude-specific vars', () => {
+    const saved = {
+      CLAUDECODE: process.env.CLAUDECODE,
+      CLAUDE_CODE_ENTRYPOINT: process.env.CLAUDE_CODE_ENTRYPOINT,
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    };
+    process.env.CLAUDECODE = '1';
+    process.env.CLAUDE_CODE_ENTRYPOINT = 'test';
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
+    try {
+      const env = sanitizeEnvCodex();
+      assert.strictEqual(env.CLAUDECODE, undefined);
+      assert.strictEqual(env.CLAUDE_CODE_ENTRYPOINT, undefined);
+      assert.strictEqual(env.ANTHROPIC_API_KEY, undefined);
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v !== undefined) process.env[k] = v; else delete process.env[k];
+      }
+    }
+  });
+
+  it('does not set CLAUDE_CODE_MAX_OUTPUT_TOKENS', () => {
+    const env = sanitizeEnvCodex();
+    assert.strictEqual(env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, undefined);
+  });
+
+  it('preserves CODEX_API_KEY', () => {
+    const original = process.env.CODEX_API_KEY;
+    process.env.CODEX_API_KEY = 'sk-codex-test';
+    try {
+      const env = sanitizeEnvCodex();
+      assert.strictEqual(env.CODEX_API_KEY, 'sk-codex-test');
+    } finally {
+      if (original !== undefined) process.env.CODEX_API_KEY = original;
+      else delete process.env.CODEX_API_KEY;
+    }
+  });
+
+  it('forces SHELL to pwsh', () => {
+    const env = sanitizeEnvCodex();
+    assert.ok(env.SHELL.includes('pwsh'), `expected SHELL to include pwsh, got: ${env.SHELL}`);
+  });
+});
+
+describe('buildCodexArgs', () => {
+  it('includes --dangerously-bypass-approvals-and-sandbox', () => {
+    const args = buildCodexArgs({ prompt: 'hello' });
+    assert.ok(args.includes('--dangerously-bypass-approvals-and-sandbox'));
+  });
+
+  it('includes --ephemeral', () => {
+    const args = buildCodexArgs({ prompt: 'hello' });
+    assert.ok(args.includes('--ephemeral'));
+  });
+
+  it('pipeline role adds --json', () => {
+    const args = buildCodexArgs({ prompt: 'hello', role: 'pipeline' });
+    assert.ok(args.includes('--json'));
+  });
+
+  it('default role has no --json', () => {
+    const args = buildCodexArgs({ prompt: 'hello' });
+    assert.ok(!args.includes('--json'));
+  });
+
+  it('passes --model', () => {
+    const args = buildCodexArgs({ prompt: 'hello', model: 'gpt-5-codex' });
+    const idx = args.indexOf('--model');
+    assert.ok(idx >= 0);
+    assert.strictEqual(args[idx + 1], 'gpt-5-codex');
+  });
+
+  it('prompt is the last arg', () => {
+    const args = buildCodexArgs({ prompt: 'do the thing' });
+    assert.strictEqual(args[args.length - 1], 'do the thing');
+  });
+
+  it('appendSystemPrompt sets developer_instructions config', () => {
+    const args = buildCodexArgs({ prompt: 'hello', appendSystemPrompt: 'be concise' });
+    const idx = args.indexOf('--config');
+    assert.ok(idx >= 0, '--config not found');
+    assert.ok(args[idx + 1].startsWith('developer_instructions='));
+  });
+
+  it('warns and skips maxTurns', () => {
+    const msgs = [];
+    buildCodexArgs({ prompt: 'hello', maxTurns: 5 }, (msg) => msgs.push(msg));
+    assert.ok(msgs.some(m => m.includes('maxTurns')));
+    // no --max-turns in args
+    const args = buildCodexArgs({ prompt: 'hello', maxTurns: 5 }, () => {});
+    assert.ok(!args.includes('--max-turns'));
+  });
+
+  it('warns and skips allowedTools', () => {
+    const msgs = [];
+    buildCodexArgs({ prompt: 'hello', allowedTools: 'Bash,Read' }, (msg) => msgs.push(msg));
+    assert.ok(msgs.some(m => m.includes('allowedTools')));
+    const args = buildCodexArgs({ prompt: 'hello', allowedTools: 'Bash,Read' }, () => {});
+    assert.ok(!args.includes('--allowed-tools'));
+  });
+});
+
+describe('parseArgs', () => {
+  it('parses --backend codex', () => {
+    const { opts } = parseArgs(['node', 'mercenary.js', '--prompt', 'hi', '--backend', 'codex']);
+    assert.strictEqual(opts.backend, 'codex');
+  });
+
+  it('--backend defaults to undefined', () => {
+    const { opts } = parseArgs(['node', 'mercenary.js', '--prompt', 'hi']);
+    assert.strictEqual(opts.backend, undefined);
+  });
+});
+
 describe('treeKill', () => {
   it('does not throw on non-existent PID', () => {
     assert.doesNotThrow(() => treeKill(999999));
@@ -102,6 +244,22 @@ describe('module exports', () => {
 
   it('exports resolveClaudePath as function', () => {
     assert.equal(typeof resolveClaudePath, 'function');
+  });
+
+  it('exports resolveCodexPath as function', () => {
+    assert.equal(typeof resolveCodexPath, 'function');
+  });
+
+  it('exports sanitizeEnvCodex as function', () => {
+    assert.equal(typeof sanitizeEnvCodex, 'function');
+  });
+
+  it('exports buildCodexArgs as function', () => {
+    assert.equal(typeof buildCodexArgs, 'function');
+  });
+
+  it('exports parseArgs as function', () => {
+    assert.equal(typeof parseArgs, 'function');
   });
 });
 
