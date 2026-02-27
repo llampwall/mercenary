@@ -210,17 +210,15 @@ Returns the path to the `codex` binary. Checks `CODEX_PATH` env var first, then 
 
 ## Roles
 
-Roles are presets — callers declare *what they are*, not which flags they need. Roles only apply to the `claude` backend.
+Roles are presets — callers declare *what they are*, not which flags they need.
 
-| Role | Mode | Behavior |
-|---|---|---|
-| `'pipeline'` | one-shot | `--output-format stream-json --verbose --strict-mcp-config` |
-| `'allmind'` | one-shot | `--output-format text` + AllMind persona injection |
-| `'coordinator'` | interactive | `allowedTools` defaults to `Bash,Read,Edit,Write,Glob,Grep` |
+| Role | Mode | claude behavior | codex behavior |
+|---|---|---|---|
+| `'pipeline'` | one-shot | `--output-format stream-json --verbose --strict-mcp-config` | `--json` (JSONL streaming output) |
+| `'allmind'` | one-shot | `--output-format text` + AllMind persona injection | AllMind persona as `developer_instructions` + `--config personality=pragmatic` |
+| `'coordinator'` | interactive | `allowedTools` defaults to `Bash,Read,Edit,Write,Glob,Grep` | `sandbox` defaults to `workspace-write`; codex default `approval_policy` (`on-request`) provides the supervised interaction pattern |
 
 The `streaming: true` option is a legacy alias for `role: 'pipeline'`.
-
-For the `codex` backend, `role: 'pipeline'` adds `--json` (JSONL streaming output). Other roles have no effect.
 
 ---
 

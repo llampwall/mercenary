@@ -282,7 +282,15 @@ async function openSessionCodex(opts, title, tmpBase) {
 
   const codexArgs = [`& "${codexPath}"`];
   if (opts.model) codexArgs.push(`-m "${opts.model}"`);
-  if (opts.sandbox) codexArgs.push(`--sandbox "${opts.sandbox}"`);
+
+  // Role-based presets for codex interactive sessions.
+  // role: 'coordinator' → supervised session; codex default approval_policy is on-request
+  //                        (pauses for human approval before each action) which is exactly right.
+  //                        Apply workspace-write sandbox as a sensible safety boundary.
+  // role: 'allmind'     → persona injection (handled below) + pragmatic personality.
+  const sandbox = opts.sandbox ?? (opts.role === 'coordinator' ? 'workspace-write' : undefined);
+  if (sandbox) codexArgs.push(`--sandbox "${sandbox}"`);
+  if (opts.role === 'allmind') codexArgs.push('--config', 'personality=pragmatic');
 
   // Persona + appendSystemPrompt as developer_instructions (write to temp file)
   const sessionPersona = opts.persona || (opts.role === 'allmind' ? ALLMIND_PERSONA_PATH : null);
