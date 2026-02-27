@@ -137,10 +137,17 @@ function buildArgs(opts) {
 
 function buildCodexArgs(opts, warn = (msg) => process.stderr.write(`mercenary: ${msg}\n`)) {
   // codex exec [flags] "prompt"
-  const args = [
-    '--dangerously-bypass-approvals-and-sandbox',
-    '--ephemeral',
-  ];
+  const args = [];
+
+  // Approval + sandbox policy.
+  // If opts.sandbox is set, use an explicit sandbox mode + never-approve instead of full bypass.
+  // Otherwise default to full bypass (suitable for trusted automation).
+  if (opts.sandbox) {
+    args.push('--sandbox', opts.sandbox, '--ask-for-approval', 'never');
+  } else {
+    args.push('--dangerously-bypass-approvals-and-sandbox');
+  }
+  args.push('--ephemeral');
 
   if (opts.model) args.push('--model', opts.model);
 
@@ -148,19 +155,26 @@ function buildCodexArgs(opts, warn = (msg) => process.stderr.write(`mercenary: $
     args.push('--json');
   }
 
-  // System prompt injection via --config developer_instructions
-  // File-based persona not supported; appendSystemPrompt text only
-  if (opts.persona) {
-    warn('persona injection for codex backend uses appendSystemPrompt text only; file-based persona is not supported');
+  // Persona + appendSystemPrompt combined as --config developer_instructions.
+  // role: 'allmind' defaults to the AllMind persona path; caller can override with opts.persona.
+  // File content is read and passed as plain text (no XML wrapper).
+  const persona = opts.persona || (opts.role === 'allmind' ? ALLMIND_PERSONA_PATH : null);
+  let developerInstructions = '';
+  if (persona) {
+    developerInstructions += readFileSync(persona, 'utf8');
   }
   if (opts.appendSystemPrompt) {
-    args.push('--config', `developer_instructions=${opts.appendSystemPrompt}`);
+    if (developerInstructions) developerInstructions += '\n\n';
+    developerInstructions += opts.appendSystemPrompt;
+  }
+  if (developerInstructions) {
+    args.push('--config', `developer_instructions=${developerInstructions}`);
   }
 
   // Unsupported features — warn and skip
   if (opts.maxTurns) warn('maxTurns is not supported by the codex backend and will be ignored');
-  if (opts.allowedTools) warn('allowedTools is not supported by the codex backend and will be ignored');
-  // mcpConfig / strictMcp — not applicable to codex, skip silently
+  if (opts.allowedTools) warn('allowedTools is not supported by the codex backend; use opts.sandbox to restrict filesystem access');
+  // mcpConfig / strictMcp — codex manages MCP via ~/.codex/config.toml; not applicable here
 
   // Prompt is positional, last
   args.push(opts.prompt);
@@ -268,6 +282,26 @@ async function openSessionCodex(opts, title, tmpBase) {
 
   const codexArgs = [`& "${codexPath}"`];
   if (opts.model) codexArgs.push(`-m "${opts.model}"`);
+  if (opts.sandbox) codexArgs.push(`--sandbox "${opts.sandbox}"`);
+
+  // Persona + appendSystemPrompt as developer_instructions (write to temp file)
+  const sessionPersona = opts.persona || (opts.role === 'allmind' ? ALLMIND_PERSONA_PATH : null);
+  let developerInstructions = '';
+  if (sessionPersona) {
+    developerInstructions += readFileSync(sessionPersona, 'utf8');
+  }
+  if (opts.appendSystemPrompt) {
+    if (developerInstructions) developerInstructions += '\n\n';
+    developerInstructions += opts.appendSystemPrompt;
+  }
+  if (developerInstructions) {
+    const instrFile = join(tmpBase, 'developer-instructions.txt');
+    writeFileSync(instrFile, developerInstructions, 'utf8');
+    lines.push(`$diContent = Get-Content "${instrFile}" -Raw`);
+    lines.push('Write-Host "[mercenary] Developer instructions: $($diContent.Length) chars" -ForegroundColor DarkGray');
+    codexArgs.push('--config "developer_instructions=$diContent"');
+  }
+
   if (opts.initialMessage) {
     codexArgs.push(`"${opts.initialMessage.replace(/"/g, '`"')}"`);
   }

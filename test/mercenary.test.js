@@ -138,9 +138,20 @@ describe('sanitizeEnvCodex', () => {
 });
 
 describe('buildCodexArgs', () => {
-  it('includes --dangerously-bypass-approvals-and-sandbox', () => {
+  it('defaults to --dangerously-bypass-approvals-and-sandbox', () => {
     const args = buildCodexArgs({ prompt: 'hello' });
     assert.ok(args.includes('--dangerously-bypass-approvals-and-sandbox'));
+    assert.ok(!args.includes('--sandbox'));
+  });
+
+  it('opts.sandbox replaces yolo with --sandbox + --ask-for-approval never', () => {
+    const args = buildCodexArgs({ prompt: 'hello', sandbox: 'workspace-write' });
+    assert.ok(!args.includes('--dangerously-bypass-approvals-and-sandbox'));
+    const sidx = args.indexOf('--sandbox');
+    assert.ok(sidx >= 0);
+    assert.strictEqual(args[sidx + 1], 'workspace-write');
+    assert.ok(args.includes('--ask-for-approval'));
+    assert.strictEqual(args[args.indexOf('--ask-for-approval') + 1], 'never');
   });
 
   it('includes --ephemeral', () => {
@@ -175,13 +186,40 @@ describe('buildCodexArgs', () => {
     const idx = args.indexOf('--config');
     assert.ok(idx >= 0, '--config not found');
     assert.ok(args[idx + 1].startsWith('developer_instructions='));
+    assert.ok(args[idx + 1].includes('be concise'));
+  });
+
+  it('persona file is read and injected as developer_instructions', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'merc-codex-test-'));
+    const personaFile = join(tmpDir, 'persona.md');
+    writeFileSync(personaFile, 'You are a test persona.');
+    const args = buildCodexArgs({ prompt: 'hello', persona: personaFile });
+    const idx = args.indexOf('--config');
+    assert.ok(idx >= 0, '--config not found');
+    assert.ok(args[idx + 1].includes('You are a test persona.'));
+  });
+
+  it('persona and appendSystemPrompt are combined in developer_instructions', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'merc-codex-test-'));
+    const personaFile = join(tmpDir, 'persona.md');
+    writeFileSync(personaFile, 'Persona content.');
+    const args = buildCodexArgs({ prompt: 'hello', persona: personaFile, appendSystemPrompt: 'Extra instructions.' });
+    const idx = args.indexOf('--config');
+    assert.ok(idx >= 0);
+    const val = args[idx + 1];
+    assert.ok(val.includes('Persona content.'));
+    assert.ok(val.includes('Extra instructions.'));
+  });
+
+  it('no --config when no persona or appendSystemPrompt', () => {
+    const args = buildCodexArgs({ prompt: 'hello' });
+    assert.ok(!args.includes('--config'));
   });
 
   it('warns and skips maxTurns', () => {
     const msgs = [];
     buildCodexArgs({ prompt: 'hello', maxTurns: 5 }, (msg) => msgs.push(msg));
     assert.ok(msgs.some(m => m.includes('maxTurns')));
-    // no --max-turns in args
     const args = buildCodexArgs({ prompt: 'hello', maxTurns: 5 }, () => {});
     assert.ok(!args.includes('--max-turns'));
   });

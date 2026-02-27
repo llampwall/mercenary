@@ -97,21 +97,26 @@ Wraps the [OpenAI Codex CLI](https://github.com/openai/codex).
 | Feature | codex | Notes |
 |---|---|---|
 | `--prompt` | ✅ | Passed as positional arg to `codex exec` |
-| `--timeout` | ✅ | Enforced by mercenary (SIGKILL / taskkill) |
+| `--timeout` | ✅ | Enforced by mercenary (taskkill), exit code 124 |
 | `--model` | ✅ | Maps to `codex exec --model` |
-| `--backend codex` | ✅ | |
-| `--json` | ✅ via `role: 'pipeline'` | Maps to `codex exec --json` (JSONL stream) |
-| `--append-system-prompt` | ✅ (partial) | Maps to `--config developer_instructions=<text>` |
 | `--interactive` | ✅ | Opens `codex` in Windows Terminal |
 | `--cwd` | ✅ | Sets working directory |
-| `--allowed-tools` | ❌ | No codex equivalent — warning printed, ignored |
+| `--append-system-prompt` | ✅ | Maps to `--config developer_instructions=<text>` |
+| `--persona <path>` | ✅ | File is read and passed as `developer_instructions` (no XML wrapper) |
+| `--am` | ✅ | Reads AllMind persona file and passes as `developer_instructions` |
+| `--json` / JSONL output | ✅ via `role: 'pipeline'` | Maps to `codex exec --json` |
+| `opts.sandbox` | ✅ | `--sandbox read-only\|workspace-write\|danger-full-access` + `--ask-for-approval never`; replaces default yolo mode |
+| MCP servers | ✅ (external config) | Codex loads MCP servers from `~/.codex/config.toml` and `.codex/config.toml`; use `codex mcp add` to configure. Not controlled via mercenary opts. |
+| `--allowed-tools` | ❌ | No direct equivalent; use `opts.sandbox` to restrict filesystem access |
 | `--max-turns` | ❌ | No codex equivalent — warning printed, ignored |
 | `--max-tokens` | ❌ | No codex equivalent |
-| `--output-format` | ❌ | Controlled by role only |
-| `--persona` | ❌ | File-based persona not supported; use `--append-system-prompt` with text |
-| `--am` | ❌ | AllMind persona file injection not supported |
-| `--system-prompt` | ❌ | Interactive mode only; not passed to codex |
-| MCP config / `--strict-mcp-config` | ❌ | Not applicable to codex |
+| `--output-format` | ❌ | Controlled by role only (`--json` for pipeline, plain text otherwise) |
+| `--system-prompt <path>` | ❌ | Claude interactive only; use `--persona` or `--append-system-prompt` instead |
+| `--strict-mcp-config` / `mcpConfig` | ❌ | Not applicable; codex manages MCP via its own config system |
+
+**MCP on codex:** Codex uses `~/.codex/config.toml` for MCP server definitions. Per-server you can set `enabled = false`, `enabled_tools = [...]`, or `disabled_tools = [...]`. Run `codex mcp add <name>` to register servers. Mercenary does not generate or inject MCP config for codex — manage it directly in `config.toml`.
+
+**AGENTS.md:** Codex reads `AGENTS.md` files as a persistent instruction layer before each task. Place project-specific instructions in `<project>/.codex/AGENTS.md` or global defaults in `~/.codex/AGENTS.md`. This is separate from `developer_instructions` (which mercenary injects via `--persona` / `--append-system-prompt`) and stacks on top of it.
 
 ---
 
@@ -138,7 +143,8 @@ const result = await run({
   outputFormat: 'stream-json',   // claude only
   verbose: true,                 // claude only, with outputFormat
   appendSystemPrompt: 'Be brief',
-  persona: 'C:/path/persona.md', // claude only
+  persona: 'C:/path/persona.md', // claude: --append-system-prompt with XML wrap; codex: developer_instructions
+  sandbox: 'workspace-write',    // codex only: read-only | workspace-write | danger-full-access
   mcpConfig: 'C:/path/mcp.json', // claude only
   strictMcp: true,               // claude only
   cwd: 'C:/project',
