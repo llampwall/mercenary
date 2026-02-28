@@ -4,13 +4,19 @@
 // Single file: module exports + CLI entry point
 
 import { spawn, execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdtempSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, existsSync, renameSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 const ALLMIND_PERSONA_PATH = 'P:\\software\\allmind\\data\\persona\\allmind-voice.md';
 const KNOWN_CLAUDE_PATH = 'C:\\Users\\Jordan\\.local\\bin\\claude.exe';
 const GRACE_PERIOD_MS = 5000;
+
+const LEDGER_PATH = join(import.meta.dirname, '.process-ledger.json');
+const SUSTAINED_DEATH_THRESHOLD = 3;   // consecutive dead checks before "resolved"
+const PURGE_MONITOR_MINUTES = 3;       // how long purge watches after killing
+const PURGE_CHECK_INTERVAL_MS = 15000; // 15s between purge checks
 
 // --- Binary Resolution ---
 
@@ -79,6 +85,235 @@ function treeKill(pid) {
     execSync(`taskkill /T /F /PID ${pid}`, { windowsHide: true, stdio: 'ignore' });
   } catch {
     // Process already dead -- ignore
+  }
+}
+
+// --- Process Ledger ---
+
+function readLedger(path = LEDGER_PATH) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'));
+  } catch (err) {
+    if (err.code === 'ENOENT') return { version: 1, entries: {} };
+    throw err;
+  }
+}
+
+function writeLedger(ledger, path = LEDGER_PATH) {
+  const tmp = path + '.tmp';
+  writeFileSync(tmp, JSON.stringify(ledger, null, 2), 'utf8');
+  renameSync(tmp, path);
+}
+
+function checkPidAlive(pid) {
+  try {
+    const out = execSync(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`, {
+      windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']
+    });
+    const lines = out.trim().split(/\r?\n/).filter(l => l.trim());
+    for (const line of lines) {
+      const match = line.match(/^"([^"]+)","(\d+)","([^"]+)","(\d+)","([^"]+)"$/);
+      if (match && match[2] === String(pid)) {
+        const memStr = match[5].replace(/[^\d]/g, '');
+        return { alive: true, memoryKB: memStr ? Number(memStr) : null };
+      }
+    }
+    return { alive: false, memoryKB: null };
+  } catch {
+    return { alive: false, memoryKB: null };
+  }
+}
+
+function discoverProcesses() {
+  const results = [];
+  for (const imageName of ['claude.exe', 'codex.exe']) {
+    try {
+      const out = execSync(`tasklist /FI "IMAGENAME eq ${imageName}" /FO CSV /NH`, {
+        windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']
+      });
+      const lines = out.trim().split(/\r?\n/).filter(l => l.trim());
+      for (const line of lines) {
+        const match = line.match(/^"([^"]+)","(\d+)","([^"]+)","(\d+)","([^"]+)"$/);
+        if (match) {
+          const memStr = match[5].replace(/[^\d]/g, '');
+          results.push({ imageName: match[1], pid: Number(match[2]), memoryKB: memStr ? Number(memStr) : null });
+        }
+      }
+    } catch { /* binary not running */ }
+  }
+  return results;
+}
+
+function ledgerRegister(info, path = LEDGER_PATH) {
+  const ledger = readLedger(path);
+  const now = new Date().toISOString();
+  ledger.entries[String(info.pid)] = {
+    pid: info.pid,
+    backend: info.backend || 'claude',
+    mode: info.mode || 'oneshot',
+    binaryPath: info.binaryPath || null,
+    spawnedAt: now,
+    spawnedBy: process.pid,
+    prompt: info.prompt ? String(info.prompt).slice(0, 200) : null,
+    cwd: info.cwd || process.cwd(),
+    status: 'alive',
+    lastCheckedAt: null,
+    lastSeenAliveAt: now,
+    memoryKB: null,
+    deathConfirmedAt: null,
+    deathSustainsCount: 0,
+    killAttempts: 0,
+    discoveredOrphan: false,
+  };
+  writeLedger(ledger, path);
+}
+
+function ledgerMarkDead(pid, path = LEDGER_PATH) {
+  const ledger = readLedger(path);
+  const entry = ledger.entries[String(pid)];
+  if (!entry) return;
+  entry.status = 'dead';
+  entry.deathConfirmedAt = new Date().toISOString();
+  entry.deathSustainsCount = SUSTAINED_DEATH_THRESHOLD;
+  writeLedger(ledger, path);
+}
+
+function ledgerAudit(path = LEDGER_PATH) {
+  const ledger = readLedger(path);
+  const now = new Date().toISOString();
+
+  for (const entry of Object.values(ledger.entries)) {
+    if (entry.status === 'resolved') continue;
+    const { alive, memoryKB } = checkPidAlive(entry.pid);
+    entry.lastCheckedAt = now;
+    if (alive) {
+      entry.lastSeenAliveAt = now;
+      entry.memoryKB = memoryKB;
+      if (entry.status !== 'killing') entry.status = 'alive';
+      entry.deathSustainsCount = 0;
+    } else {
+      if (entry.status !== 'dead' && entry.status !== 'killing') {
+        entry.status = 'dead';
+        if (!entry.deathConfirmedAt) entry.deathConfirmedAt = now;
+      }
+      entry.deathSustainsCount = (entry.deathSustainsCount || 0) + 1;
+      if (entry.deathSustainsCount >= SUSTAINED_DEATH_THRESHOLD) {
+        entry.status = 'resolved';
+      }
+    }
+  }
+
+  const discovered = discoverProcesses();
+  for (const proc of discovered) {
+    if (!ledger.entries[String(proc.pid)]) {
+      ledger.entries[String(proc.pid)] = {
+        pid: proc.pid,
+        backend: proc.imageName.replace('.exe', ''),
+        mode: 'unknown',
+        binaryPath: null,
+        spawnedAt: null,
+        spawnedBy: null,
+        prompt: null,
+        cwd: null,
+        status: 'orphan',
+        lastCheckedAt: now,
+        lastSeenAliveAt: now,
+        memoryKB: proc.memoryKB,
+        deathConfirmedAt: null,
+        deathSustainsCount: 0,
+        killAttempts: 0,
+        discoveredOrphan: true,
+      };
+    }
+  }
+
+  writeLedger(ledger, path);
+  return ledger;
+}
+
+function ledgerStatus(path = LEDGER_PATH) {
+  const ledger = ledgerAudit(path);
+  const entries = Object.values(ledger.entries);
+  if (!entries.length) return 'No tracked processes.';
+
+  const lines = [
+    `${'PID'.padEnd(8)} ${'STATUS'.padEnd(10)} ${'MODE'.padEnd(12)} ${'BACKEND'.padEnd(8)} ${'MEM(KB)'.padEnd(10)} ${'SPAWNED'.padEnd(26)} ORPHAN`,
+    '-'.repeat(80),
+  ];
+  for (const e of entries.sort((a, b) => a.pid - b.pid)) {
+    const mem = e.memoryKB != null ? String(e.memoryKB) : '-';
+    const spawned = e.spawnedAt ? e.spawnedAt.replace('T', ' ').slice(0, 23) : '-';
+    const orphan = e.discoveredOrphan ? 'yes' : 'no';
+    lines.push(
+      `${String(e.pid).padEnd(8)} ${e.status.padEnd(10)} ${e.mode.padEnd(12)} ${e.backend.padEnd(8)} ${mem.padEnd(10)} ${spawned.padEnd(26)} ${orphan}`
+    );
+  }
+  return lines.join('\n');
+}
+
+async function ledgerPurge(path = LEDGER_PATH) {
+  const log = (msg) => process.stdout.write(`[purge] ${msg}\n`);
+
+  log('Phase 1: Initial kill pass...');
+  let ledger = ledgerAudit(path);
+  const toKill = Object.values(ledger.entries).filter(
+    e => ['alive', 'orphan', 'killing'].includes(e.status)
+  );
+
+  if (!toKill.length) {
+    log('No active processes to purge.');
+    return;
+  }
+
+  for (const entry of toKill) {
+    log(`Killing PID ${entry.pid} (${entry.backend} ${entry.mode})...`);
+    entry.status = 'killing';
+    entry.killAttempts = (entry.killAttempts || 0) + 1;
+    treeKill(entry.pid);
+  }
+  writeLedger(ledger, path);
+
+  log(`Phase 2: Monitoring for ${PURGE_MONITOR_MINUTES} minutes (check every ${PURGE_CHECK_INTERVAL_MS / 1000}s)...`);
+  const deadline = Date.now() + PURGE_MONITOR_MINUTES * 60 * 1000;
+  let iteration = 0;
+
+  while (Date.now() < deadline) {
+    await sleep(PURGE_CHECK_INTERVAL_MS);
+    iteration++;
+    log(`Check ${iteration}...`);
+
+    ledger = ledgerAudit(path);
+    const survivors = Object.values(ledger.entries).filter(
+      e => ['alive', 'orphan', 'killing'].includes(e.status)
+    );
+
+    if (!survivors.length) {
+      log('All processes confirmed dead.');
+      break;
+    }
+
+    for (const entry of survivors) {
+      log(`Re-killing PID ${entry.pid} (attempt ${(entry.killAttempts || 0) + 1})...`);
+      entry.killAttempts = (entry.killAttempts || 0) + 1;
+      entry.status = 'killing';
+      treeKill(entry.pid);
+    }
+    writeLedger(ledger, path);
+  }
+
+  log('Phase 3: Final report...');
+  ledger = ledgerAudit(path);
+  const unresolved = Object.values(ledger.entries).filter(
+    e => !['resolved', 'dead'].includes(e.status)
+  );
+
+  if (unresolved.length) {
+    log(`WARNING: ${unresolved.length} process(es) could not be confirmed dead:`);
+    for (const e of unresolved) {
+      log(`  PID ${e.pid} (${e.backend}) - status: ${e.status}, kill attempts: ${e.killAttempts}`);
+    }
+  } else {
+    log('All processes purged successfully.');
   }
 }
 
@@ -219,6 +454,9 @@ function run(opts = {}) {
       env
     });
     proc.unref();
+    try {
+      ledgerRegister({ pid: proc.pid, backend, mode: 'oneshot', binaryPath, prompt: opts.prompt, cwd: opts.cwd || process.cwd() });
+    } catch { /* ledger failure must not break spawning */ }
 
     // Notify caller of PID synchronously (still inside Promise executor)
     if (opts.onStart) opts.onStart(proc.pid);
@@ -248,6 +486,7 @@ function run(opts = {}) {
 
     proc.on('close', (exitCode) => {
       if (timer) clearTimeout(timer);
+      try { ledgerMarkDead(proc.pid); } catch { /* ledger failure */ }
       resolve({
         stdout: stdout.trimEnd(),
         stderr: stderr.trimEnd(),
@@ -260,6 +499,7 @@ function run(opts = {}) {
 
     proc.on('error', (err) => {
       if (timer) clearTimeout(timer);
+      try { ledgerMarkDead(proc.pid); } catch { /* ledger failure */ }
       reject(err);
     });
   });
@@ -336,6 +576,9 @@ async function openSessionCodex(opts, title, tmpBase) {
     windowsHide: false
   });
   proc.unref();
+  try {
+    ledgerRegister({ pid: proc.pid, backend: 'codex', mode: 'interactive', binaryPath: codexPath, cwd: opts.cwd });
+  } catch { /* ledger failure must not break spawning */ }
 
   return { pid: proc.pid, title, launcherPath };
 }
@@ -467,6 +710,9 @@ async function openSession(opts = {}) {
     windowsHide: false
   });
   proc.unref();
+  try {
+    ledgerRegister({ pid: proc.pid, backend: 'claude', mode: 'interactive', binaryPath: claudePath, cwd: opts.cwd });
+  } catch { /* ledger failure must not break spawning */ }
 
   return { pid: proc.pid, title, launcherPath };
 }
@@ -477,7 +723,7 @@ function parseArgs(argv) {
   const args = argv.slice(2);
   const opts = {};
   const positional = [];
-  const booleanFlags = new Set(['--json', '--am', '--interactive']);
+  const booleanFlags = new Set(['--json', '--am', '--interactive', '--ps', '--audit', '--purge']);
   const valueFlags = new Set([
     '--prompt', '--timeout', '--allowed-tools', '--max-tokens',
     '--persona', '--model', '--output-format', '--append-system-prompt',
@@ -517,6 +763,25 @@ async function main() {
   // --kill mode
   if (opts.kill) {
     treeKill(Number(opts.kill));
+    return;
+  }
+
+  // --ps mode: show ledger status (with fresh audit)
+  if (opts.ps) {
+    console.log(ledgerStatus());
+    return;
+  }
+
+  // --audit mode: run audit and display results
+  if (opts.audit) {
+    ledgerAudit();
+    console.log(ledgerStatus());
+    return;
+  }
+
+  // --purge mode: kill all tracked processes, monitor, report
+  if (opts.purge) {
+    await ledgerPurge();
     return;
   }
 
@@ -572,6 +837,9 @@ async function main() {
   console.error('Usage: mercenary --prompt <text> [--backend claude|codex] [--timeout <s>] [--json]');
   console.error('       mercenary --interactive [--backend claude|codex] [--system-prompt <path>]');
   console.error('       mercenary --kill <pid>');
+  console.error('       mercenary --ps              Show all tracked processes with status and memory');
+  console.error('       mercenary --audit           Scan, discover orphans, update ledger metrics');
+  console.error('       mercenary --purge           Kill all tracked processes, monitor 3 min, report');
   process.exit(1);
 }
 
@@ -583,4 +851,8 @@ if (resolve(process.argv[1]) === resolve(import.meta.filename)) {
   });
 }
 
-export { run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnvCodex, buildCodexArgs, parseArgs };
+export {
+  run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnvCodex, buildCodexArgs, parseArgs,
+  ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, ledgerPurge,
+  checkPidAlive, discoverProcesses, readLedger, writeLedger, LEDGER_PATH,
+};

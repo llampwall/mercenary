@@ -68,6 +68,9 @@ node mercenary.js --kill 12345
 | `--title <text>` | string | Window title for interactive mode |
 | `--cwd <path>` | string | Working directory for the agent process |
 | `--kill <pid>` | number | Kill a process tree by PID |
+| `--ps` | boolean | Show all tracked processes with status and memory |
+| `--audit` | boolean | Scan system-wide, discover orphan processes, update ledger |
+| `--purge` | boolean | Kill all tracked processes, monitor 3 min, confirm death |
 
 Positional arguments after flags are passed as the `initialMessage` in interactive mode.
 

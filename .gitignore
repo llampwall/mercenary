@@ -27,3 +27,7 @@ build/
 coverage/
 
 .codex/sessions/
+
+# process ledger (runtime state, never committed)
+.process-ledger.json
+.process-ledger.json.tmp

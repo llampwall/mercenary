@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 // Import module exports
-import { run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnvCodex, buildCodexArgs, parseArgs } from '../mercenary.js';
+import { run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnvCodex, buildCodexArgs, parseArgs, ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, checkPidAlive, discoverProcesses, readLedger, writeLedger } from '../mercenary.js';
 
 const MERCENARY = join(import.meta.dirname, '..', 'mercenary.js');
 
@@ -342,6 +342,173 @@ describe('CLI', () => {
 });
 
 // =============================================================================
+// Process Ledger Unit Tests
+// =============================================================================
+
+const SUSTAINED_DEATH_THRESHOLD = 3; // matches constant in mercenary.js
+
+function tmpLedgerPath() {
+  return join(mkdtempSync(join(tmpdir(), 'merc-ledger-')), 'ledger.json');
+}
+
+describe('readLedger / writeLedger', () => {
+  it('readLedger returns empty ledger when file does not exist', () => {
+    const path = join(tmpdir(), `merc-missing-${Date.now()}-${Math.random()}.json`);
+    const ledger = readLedger(path);
+    assert.deepEqual(ledger, { version: 1, entries: {} });
+  });
+
+  it('writeLedger / readLedger round-trip preserves data', () => {
+    const path = tmpLedgerPath();
+    const ledger = { version: 1, entries: { '123': { pid: 123, status: 'alive' } } };
+    writeLedger(ledger, path);
+    const loaded = readLedger(path);
+    assert.deepEqual(loaded, ledger);
+  });
+});
+
+describe('ledgerRegister', () => {
+  it('adds entry with status alive and correct fields', () => {
+    const path = tmpLedgerPath();
+    ledgerRegister({ pid: 42, backend: 'claude', mode: 'oneshot', prompt: 'hello world' }, path);
+    const ledger = readLedger(path);
+    const entry = ledger.entries['42'];
+    assert.ok(entry, 'entry should exist');
+    assert.strictEqual(entry.pid, 42);
+    assert.strictEqual(entry.status, 'alive');
+    assert.strictEqual(entry.backend, 'claude');
+    assert.strictEqual(entry.mode, 'oneshot');
+    assert.strictEqual(entry.prompt, 'hello world');
+    assert.strictEqual(entry.discoveredOrphan, false);
+    assert.ok(entry.spawnedAt, 'spawnedAt should be set');
+    assert.ok(entry.lastSeenAliveAt, 'lastSeenAliveAt should be set');
+  });
+
+  it('truncates prompt to 200 characters', () => {
+    const path = tmpLedgerPath();
+    const longPrompt = 'x'.repeat(300);
+    ledgerRegister({ pid: 99, prompt: longPrompt }, path);
+    const ledger = readLedger(path);
+    assert.strictEqual(ledger.entries['99'].prompt.length, 200);
+  });
+
+  it('defaults backend to claude and mode to oneshot', () => {
+    const path = tmpLedgerPath();
+    ledgerRegister({ pid: 55 }, path);
+    const entry = readLedger(path).entries['55'];
+    assert.strictEqual(entry.backend, 'claude');
+    assert.strictEqual(entry.mode, 'oneshot');
+  });
+});
+
+describe('ledgerMarkDead', () => {
+  it('transitions entry from alive to dead with confirmed timestamp', () => {
+    const path = tmpLedgerPath();
+    ledgerRegister({ pid: 43, backend: 'claude', mode: 'oneshot' }, path);
+    ledgerMarkDead(43, path);
+    const ledger = readLedger(path);
+    const entry = ledger.entries['43'];
+    assert.strictEqual(entry.status, 'dead');
+    assert.ok(entry.deathConfirmedAt, 'deathConfirmedAt should be set');
+    assert.strictEqual(entry.deathSustainsCount, SUSTAINED_DEATH_THRESHOLD);
+  });
+
+  it('is a no-op for unknown PID', () => {
+    const path = tmpLedgerPath();
+    assert.doesNotThrow(() => ledgerMarkDead(99999, path));
+    const ledger = readLedger(path);
+    assert.deepEqual(ledger.entries, {});
+  });
+});
+
+describe('checkPidAlive', () => {
+  it('returns false for a definitely-dead PID (999999)', () => {
+    const { alive } = checkPidAlive(999999);
+    assert.strictEqual(alive, false);
+  });
+
+  it('returns true for the current process PID', () => {
+    const { alive } = checkPidAlive(process.pid);
+    assert.strictEqual(alive, true);
+  });
+});
+
+describe('discoverProcesses', () => {
+  it('returns an array', () => {
+    const result = discoverProcesses();
+    assert.ok(Array.isArray(result), 'should return an array');
+  });
+
+  it('each entry has pid (number) and imageName (string)', () => {
+    const result = discoverProcesses();
+    for (const p of result) {
+      assert.strictEqual(typeof p.pid, 'number');
+      assert.strictEqual(typeof p.imageName, 'string');
+    }
+  });
+});
+
+describe('ledgerAudit', () => {
+  it('handles empty ledger without error', () => {
+    const path = tmpLedgerPath();
+    assert.doesNotThrow(() => ledgerAudit(path));
+    const ledger = readLedger(path);
+    assert.deepEqual(ledger.version, 1);
+  });
+
+  it('marks a dead PID with status dead after one audit', () => {
+    const path = tmpLedgerPath();
+    ledgerRegister({ pid: 999998, backend: 'claude', mode: 'oneshot' }, path);
+    ledgerAudit(path);
+    const ledger = readLedger(path);
+    const entry = ledger.entries['999998'];
+    assert.strictEqual(entry.status, 'dead');
+    assert.ok(entry.deathSustainsCount >= 1);
+  });
+
+  it('resolves an entry after SUSTAINED_DEATH_THRESHOLD consecutive dead checks', () => {
+    const path = tmpLedgerPath();
+    ledgerRegister({ pid: 999997, backend: 'claude', mode: 'oneshot' }, path);
+    for (let i = 0; i < SUSTAINED_DEATH_THRESHOLD; i++) {
+      ledgerAudit(path);
+    }
+    const ledger = readLedger(path);
+    const entry = ledger.entries['999997'];
+    assert.strictEqual(entry.status, 'resolved');
+  });
+
+  it('marks current process as alive', () => {
+    const path = tmpLedgerPath();
+    ledgerRegister({ pid: process.pid, backend: 'node', mode: 'test' }, path);
+    ledgerAudit(path);
+    const ledger = readLedger(path);
+    const entry = ledger.entries[String(process.pid)];
+    assert.strictEqual(entry.status, 'alive');
+  });
+});
+
+describe('ledgerStatus', () => {
+  it('returns a string for an empty-start ledger (may discover orphans)', () => {
+    const path = tmpLedgerPath();
+    const status = ledgerStatus(path);
+    // If no claude/codex processes are running, returns the empty message.
+    // If processes are discovered as orphans, returns a table — both are valid.
+    assert.strictEqual(typeof status, 'string');
+    assert.ok(status.length > 0);
+  });
+
+  it('returns a formatted table string when entries exist', () => {
+    const path = tmpLedgerPath();
+    ledgerRegister({ pid: 11111, backend: 'claude', mode: 'oneshot' }, path);
+    const status = ledgerStatus(path);
+    assert.strictEqual(typeof status, 'string');
+    assert.ok(status.includes('PID'), 'should include PID header');
+    assert.ok(status.includes('STATUS'), 'should include STATUS header');
+    assert.ok(status.includes('11111'), 'should include the registered PID');
+  });
+});
+
+// =============================================================================
 // Integration Tests (require claude binary)
 // =============================================================================
 
@@ -466,5 +633,24 @@ describe('integration', () => {
     });
     assert.equal(result.timedOut, false);
     assert.ok(result.stdout.includes('TOOLS_OK'));
+  });
+
+  it('run() registers PID in ledger and marks it dead on exit', async (t) => {
+    skipWithoutIntegration(t);
+    let spawnedPid;
+    const result = await run({
+      prompt: 'Reply with exactly: LEDGER_INTEGRATION_OK',
+      timeout: 30,
+      maxTurns: 1,
+      onStart: (pid) => { spawnedPid = pid; },
+    });
+    assert.ok(spawnedPid, 'onStart should have been called with a PID');
+    assert.ok(result.stdout.includes('LEDGER_INTEGRATION_OK'));
+    // After run() completes, the entry should be dead in the real ledger
+    const { readLedger: readL, LEDGER_PATH: LP } = await import('../mercenary.js');
+    const ledger = readL(LP);
+    const entry = ledger.entries[String(spawnedPid)];
+    assert.ok(entry, `entry for PID ${spawnedPid} should exist in ledger`);
+    assert.strictEqual(entry.status, 'dead', `expected status dead, got ${entry.status}`);
   });
 });
