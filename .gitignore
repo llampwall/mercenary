@@ -31,3 +31,9 @@ coverage/
 # process ledger (runtime state, never committed)
 .process-ledger.json
 .process-ledger.json.tmp
+
+# chinvex runtime state
+.chinvex-status.json
+
+# scratch / temp scripts
+_patch.ps1
