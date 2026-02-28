@@ -14,35 +14,39 @@ const GRACE_PERIOD_MS = 5000;
 
 // --- Binary Resolution ---
 
-function resolveClaudePath() {
-  if (process.env.CLAUDE_PATH) {
-    if (existsSync(process.env.CLAUDE_PATH)) return process.env.CLAUDE_PATH;
-    throw new Error(`CLAUDE_PATH set to "${process.env.CLAUDE_PATH}" but file not found.`);
+function resolveBinary({ envVar, knownPaths = [], whereName, notFoundMsg }) {
+  if (process.env[envVar]) {
+    if (existsSync(process.env[envVar])) return process.env[envVar];
+    throw new Error(`${envVar} set to "${process.env[envVar]}" but file not found.`);
   }
-  if (existsSync(KNOWN_CLAUDE_PATH)) return KNOWN_CLAUDE_PATH;
+  for (const p of knownPaths) {
+    if (existsSync(p)) return p;
+  }
   try {
-    const result = execSync('where.exe claude', {
+    const result = execSync(`where.exe ${whereName}`, {
       windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']
     });
     const found = result.trim().split(/\r?\n/)[0].trim();
     if (found && existsSync(found)) return found;
   } catch { /* not in PATH */ }
-  throw new Error('claude binary not found. Set CLAUDE_PATH or ensure claude is installed.');
+  throw new Error(notFoundMsg);
+}
+
+function resolveClaudePath() {
+  return resolveBinary({
+    envVar: 'CLAUDE_PATH',
+    knownPaths: [KNOWN_CLAUDE_PATH],
+    whereName: 'claude',
+    notFoundMsg: 'claude binary not found. Set CLAUDE_PATH or ensure claude is installed.',
+  });
 }
 
 function resolveCodexPath() {
-  if (process.env.CODEX_PATH) {
-    if (existsSync(process.env.CODEX_PATH)) return process.env.CODEX_PATH;
-    throw new Error(`CODEX_PATH set to "${process.env.CODEX_PATH}" but file not found.`);
-  }
-  try {
-    const result = execSync('where.exe codex', {
-      windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']
-    });
-    const found = result.trim().split(/\r?\n/)[0].trim();
-    if (found && existsSync(found)) return found;
-  } catch { /* not in PATH */ }
-  throw new Error('codex binary not found. Set CODEX_PATH or run: npm install -g @openai/codex');
+  return resolveBinary({
+    envVar: 'CODEX_PATH',
+    whereName: 'codex',
+    notFoundMsg: 'codex binary not found. Set CODEX_PATH or run: npm install -g @openai/codex',
+  });
 }
 
 // --- Environment Sanitization ---
