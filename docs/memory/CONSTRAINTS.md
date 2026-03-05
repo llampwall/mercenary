@@ -23,6 +23,8 @@
 - Automation scripts must live in `scripts/` or `tools/`
 - LF line endings everywhere; only `.bat` and `.cmd` may use CRLF (enforced by `.editorconfig` and `.gitattributes`)
 - Multiline content edits must use direct file edits — no ad-hoc Python/regex replacement scripts
+- When `--resume <id>` is used, `--no-session-persistence` must NOT be passed (resume requires session persistence) (updated 2026-03-05)
+- Use `appendSystemPrompt`/`--append-system-prompt` for persona injection; only use `--system-prompt` when the full default system prompt must be replaced (updated 2026-03-05)
 
 ## Key Facts
 - CLI entry: `node mercenary.js --prompt "..." --timeout N`
@@ -32,6 +34,10 @@
 - AllMind persona path: `P:\software\allmind\data\persona\allmind-voice.md` (used by `--am` / `role:'allmind'`)
 - Role presets: `pipeline` → `--output-format stream-json --verbose` + `--strict-mcp-config`; `coordinator` → `--allowed-tools Bash,Read,Edit,Write,Glob,Grep` + `strictMcp:true` in openSession; `allmind` → `--output-format text` + persona (updated 2026-02-26)
 - SHELL is forced to `pwsh` (the App Execution Alias); bash.exe assignment was incorrect, caused by a broken Claude Code update (updated 2026-02-26)
+- `.claude/settings.json` runs a chinvex SessionStart hook that delivers a session brief; `ACTION REQUIRED` in brief means memory files need updating via `/update-memory`
+- Codex backend plan: `docs/plans/2026-02-27-codex-backend.md` — routes subprocess calls through `codex exec` instead of `claude` when `opts.backend='codex'`
+- `openHeadlessSession(opts)` — persistent headless Claude session via stdin/stdout pipe; does not open a terminal window (updated 2026-03-05)
+- `--resume <id>` option in `run()` — enables session continuity; strips `--no-session-persistence` and passes `--resume <id>` to claude CLI (updated 2026-03-05)
 
 ## Hazards
 - `--interactive` silently fails if `wt` or `pwsh` are not installed/discoverable on PATH

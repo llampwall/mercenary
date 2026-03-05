@@ -4,17 +4,32 @@
 # Decisions
 
 ## Recent (last 30 days)
-- Initial implementation: single-file Node.js CLI+module wrapping Claude Code for Windows subprocess management
-- Zero-dependency, single-file design chosen for easy vendoring into AllMind
-- Mandatory env sanitization (strip `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY`) enforced at spawn time
-- Role-based presets added so callers declare intent (`pipeline`, `coordinator`, `allmind`) rather than individual flags
-- `openSession()` extended with `cwd`, `allowedTools`, `model` options for flexible interactive session control
-- `onStart(pid)` and `onData(chunk, stream)` callbacks added to `run()` for real-time PID access and streaming
-- MCP suppression via `--strict-mcp-config` only (mcp-none.json fallback removed — global mcpServers now empty)
-- Fixed: `--no-session-persistence` removed from `openSession()` (only valid for `-p` one-shot mode)
-- Fixed: `--strict-mcp-config` disabled for interactive sessions (was causing silent hang)
-- Fixed: TEMP/TMP isolated per interactive session to prevent EINVAL from shared task output directory collisions
-- SHELL forced to `pwsh` (App Execution Alias); bash.exe was incorrectly set during a broken Claude Code update
+- Added `openHeadlessSession()` for persistent headless Claude sessions via stdin/stdout pipe (no terminal window)
+- Added `--resume <id>` support in `run()` for session continuity across calls; strips `--no-session-persistence` when resuming
+- Reverted `--system-prompt` addition from `buildArgs()`; `--append-system-prompt` (appendSystemPrompt) is the correct persona injection mechanism
+- Bootstrapped `docs/memory/` tracking system and chinvex SessionStart hook via `.claude/settings.json`
+- Added Codex backend plan (`docs/plans/2026-02-27-codex-backend.md`) for routing calls through `codex exec`
+- SHELL forced to `pwsh` (App Execution Alias); MCP suppression via `--strict-mcp-config` only; TEMP/TMP isolated per session
+
+## 2026-03
+
+### 2026-03-05 — Added openHeadlessSession() for persistent headless Claude sessions
+
+- **Why:** Callers needed a way to run Claude persistently via pipe without opening a terminal window (distinct from `openSession()` which uses `wt`).
+- **Impact:** New exported function `openHeadlessSession(opts)` — 238 lines added to `mercenary.js`. Uses stdin/stdout pipe, no terminal, supports long-lived sessions.
+- **Evidence:** 6946b96
+
+### 2026-03-05 — Added --resume support to run() / buildArgs()
+
+- **Why:** Callers needed session continuity across `run()` invocations — resume a prior Claude session by ID.
+- **Impact:** `run(opts)` now accepts `resume` option. When set, `--no-session-persistence` is omitted and `--resume <id>` is passed to claude CLI.
+- **Evidence:** d30f19f
+
+### 2026-03-05 — Reverted --system-prompt from buildArgs()
+
+- **Why:** `--system-prompt` completely replaces the default system prompt, which is not what persona injection (Core) needs. `--append-system-prompt` via `appendSystemPrompt` already handles that correctly.
+- **Impact:** `--system-prompt` removed from `buildArgs()`. Use `appendSystemPrompt` for persona injection; `--system-prompt` is only for cases requiring full default replacement.
+- **Evidence:** 67c9b70
 
 ## 2026-02
 
@@ -71,3 +86,9 @@
 - **Why:** The `SHELL=bash.exe` assignment and associated comments were added during a broken Claude Code update, not because pwsh was incompatible. The pwsh App Execution Alias as SHELL is correct and always was.
 - **Impact:** Cleaned up ~12 lines of stale comments and incorrect SHELL assignment. `sanitizeEnv()` now sets `SHELL=pwsh` without caveats.
 - **Evidence:** df43e22
+
+### 2026-02-28 — Bootstrapped docs/memory/ tracking + chinvex session hook + Codex backend plan
+
+- **Why:** Need persistent cross-session memory and a plan for the next major feature (Codex CLI backend support).
+- **Impact:** Added `docs/memory/` (STATE, CONSTRAINTS, DECISIONS), `docs/plans/2026-02-27-codex-backend.md`, and `.claude/settings.json` with chinvex SessionStart hook. `.gitignore` updated to exclude runtime noise (`.chinvex-status.json`, `_patch.ps1`).
+- **Evidence:** ac102d6
