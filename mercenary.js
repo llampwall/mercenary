@@ -717,6 +717,243 @@ async function openSession(opts = {}) {
   return { pid: proc.pid, title, launcherPath };
 }
 
+// --- Headless Persistent Session Mode ---
+
+/**
+ * Open a headless persistent Claude session with stdio pipes.
+ * Unlike openSession() (visible terminal) or run() (one-shot with -p),
+ * this spawns Claude in conversational mode with --output-format stream-json
+ * and communicates via stdin/stdout pipes. No visible window.
+ *
+ * Returns a session handle: { send(message), close(), pid, closed, turnCount }
+ *
+ * @param {Object} opts
+ * @param {string} opts.role - Role preset (e.g. 'core')
+ * @param {string} [opts.cwd] - Working directory
+ * @param {string} [opts.systemPrompt] - System prompt content (string, not file path)
+ * @param {string} [opts.appendSystemPrompt] - Additional system prompt
+ * @param {string} [opts.persona] - Persona file path
+ * @param {string} [opts.model] - Model to use
+ * @param {number} [opts.maxTokens] - Max output tokens
+ * @returns {Promise<{send: Function, close: Function, pid: number, closed: boolean, turnCount: number}>}
+ */
+async function openHeadlessSession(opts = {}) {
+  const claudePath = resolveClaudePath();
+  const env = sanitizeEnv(opts);
+
+  const args = ['--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'];
+
+  // System prompt
+  if (opts.systemPrompt) {
+    args.push('--system-prompt', opts.systemPrompt);
+  }
+
+  // Model selection
+  if (opts.model) {
+    args.push('--model', opts.model);
+  }
+
+  // Persona + append-system-prompt (reuse existing pattern from buildArgs)
+  const persona = opts.persona || (opts.role === 'allmind' ? ALLMIND_PERSONA_PATH : null);
+  let appendSystemPrompt = '';
+  if (persona) {
+    appendSystemPrompt += loadPersona(persona);
+  }
+  if (opts.appendSystemPrompt) {
+    if (appendSystemPrompt) appendSystemPrompt += '\n\n';
+    appendSystemPrompt += opts.appendSystemPrompt;
+  }
+  if (appendSystemPrompt) {
+    args.push('--append-system-prompt', appendSystemPrompt);
+  }
+
+  // MCP config — headless Core sessions use strict MCP to block project .mcp.json
+  if (opts.strictMcp !== false) {
+    args.push('--strict-mcp-config');
+  }
+  if (opts.mcpConfig) {
+    args.push('--mcp-config', opts.mcpConfig);
+  }
+
+  const proc = spawn(claudePath, args, {
+    cwd: opts.cwd || process.cwd(),
+    shell: false,
+    windowsHide: true,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env,
+  });
+
+  try {
+    ledgerRegister({
+      pid: proc.pid,
+      backend: 'claude',
+      mode: 'headless-session',
+      binaryPath: claudePath,
+      prompt: '[headless session]',
+      cwd: opts.cwd || process.cwd(),
+    });
+  } catch { /* ledger failure must not break spawning */ }
+
+  let closed = false;
+  let turnCount = 0;
+  let lineBuffer = '';
+  let currentResolve = null;
+  let currentReject = null;
+  let currentTextContent = '';
+
+  // Process stdout line by line for stream-json output
+  proc.stdout.on('data', (chunk) => {
+    lineBuffer += chunk.toString();
+    const lines = lineBuffer.split('\n');
+    lineBuffer = lines.pop(); // keep incomplete line in buffer
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const data = JSON.parse(line);
+        _handleStreamEvent(data);
+      } catch {
+        // Non-JSON line — ignore (verbose output)
+      }
+    }
+  });
+
+  function _handleStreamEvent(data) {
+    if (data.type === 'assistant') {
+      // Accumulate text content from assistant message
+      const content = data.message?.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === 'text') {
+            currentTextContent = block.text || '';
+          }
+        }
+      }
+    } else if (data.type === 'result') {
+      // Turn complete — resolve the pending send() promise
+      if (currentResolve) {
+        const resolve = currentResolve;
+        currentResolve = null;
+        currentReject = null;
+
+        // Try to parse response as JSON from the accumulated text
+        let parsed;
+        try {
+          // Extract JSON block from text (may be wrapped in markdown code fence)
+          const jsonMatch = currentTextContent.match(/```json\s*([\s\S]*?)\s*```/) ||
+                            currentTextContent.match(/(\{[\s\S]*\})/);
+          if (jsonMatch) {
+            parsed = JSON.parse(jsonMatch[1]);
+          } else {
+            parsed = { action: 'answer', reasoning: currentTextContent };
+          }
+        } catch {
+          parsed = { action: 'answer', reasoning: currentTextContent };
+        }
+
+        currentTextContent = '';
+        resolve(parsed);
+      }
+    }
+  }
+
+  // Handle process crash
+  proc.on('close', (exitCode) => {
+    closed = true;
+    try { ledgerMarkDead(proc.pid); } catch { /* ledger failure */ }
+    if (currentReject) {
+      const reject = currentReject;
+      currentResolve = null;
+      currentReject = null;
+      reject(new Error(`Headless session process exited with code ${exitCode}`));
+    }
+  });
+
+  proc.on('error', (err) => {
+    closed = true;
+    try { ledgerMarkDead(proc.pid); } catch { /* ledger failure */ }
+    if (currentReject) {
+      const reject = currentReject;
+      currentResolve = null;
+      currentReject = null;
+      reject(err);
+    }
+  });
+
+  // Wait for initial system message (session ready)
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('Headless session startup timed out (30s)'));
+    }, 30000);
+
+    const onData = (chunk) => {
+      const text = chunk.toString();
+      // Look for system init message in stream-json output
+      if (text.includes('"type":"system"') || text.includes('"type": "system"')) {
+        clearTimeout(timeout);
+        proc.stdout.removeListener('data', onData);
+        resolve();
+      }
+    };
+    proc.stdout.on('data', onData);
+
+    proc.on('close', () => {
+      clearTimeout(timeout);
+      reject(new Error('Headless session process exited before ready'));
+    });
+  });
+
+  return {
+    /**
+     * Send a message to the headless session and await the response.
+     * @param {string} message - The message to send
+     * @returns {Promise<Object>} Parsed JSON response from Claude
+     */
+    send: (message) => {
+      if (closed) return Promise.reject(new Error('Session is closed'));
+
+      return new Promise((resolve, reject) => {
+        currentResolve = resolve;
+        currentReject = reject;
+        currentTextContent = '';
+        turnCount++;
+
+        // Write message to stdin followed by newline
+        proc.stdin.write(message + '\n');
+      });
+    },
+
+    /**
+     * Close the headless session.
+     */
+    close: async () => {
+      if (closed) return;
+      closed = true;
+      try {
+        proc.stdin.end();
+        // Give it 5s to exit gracefully, then force kill
+        await new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            treeKill(proc.pid);
+            resolve();
+          }, 5000);
+          proc.on('close', () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        });
+      } catch {
+        treeKill(proc.pid);
+      }
+      try { ledgerMarkDead(proc.pid); } catch { /* ledger failure */ }
+    },
+
+    get closed() { return closed; },
+    get turnCount() { return turnCount; },
+    get pid() { return proc.pid; },
+  };
+}
+
 // --- CLI Argument Parser ---
 
 function parseArgs(argv) {
@@ -852,7 +1089,7 @@ if (resolve(process.argv[1]) === resolve(import.meta.filename)) {
 }
 
 export {
-  run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnvCodex, buildCodexArgs, parseArgs,
+  run, openSession, openHeadlessSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnvCodex, buildCodexArgs, parseArgs,
   ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, ledgerPurge,
   checkPidAlive, discoverProcesses, readLedger, writeLedger, LEDGER_PATH,
 };
