@@ -7,7 +7,7 @@ Repo: mercenary
 
 ## Project
 
-Node.js CLI + module that wraps Claude Code's `claude` command with proper subprocess management for Windows. Single file, zero dependencies.
+Node.js CLI + module that wraps `claude` and `codex` with Windows-safe subprocess orchestration. Single file, zero dependencies.
 
 ## Language
 
@@ -16,30 +16,34 @@ JavaScript (Node.js 22, ESM)
 ## Structure
 
 - `mercenary.js` -- Single file: module exports + CLI entry point
-- `test/mercenary.test.js` -- Tests
+- `test/mercenary.test.js` -- Unit, CLI, ledger, and integration-gated tests
 - `docs/specs/mercenary.md` -- Specification
+- `docs/project_notes/` -- Canonical project memory
 
 ## Key Rules
 
-- Zero external dependencies. Only Node.js stdlib.
-- Single file (`mercenary.js`). No build step.
-- Always set `--dangerously-skip-permissions` on spawned claude processes.
-- Set `--no-session-persistence` for one-shot `-p` launches; do not pass it to interactive session launches.
-- Always delete `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY` from child env
-- Force child `SHELL` to `pwsh` in `sanitizeEnv()` to avoid inherited `bash.exe` behavior on Windows automation hosts.
-- Use `shell: false` with resolved claude binary path (not shell lookup)
-- Use `taskkill /T /F /PID` for process tree kill on Windows
-- `pipeline` defaults to strict MCP isolation via `--strict-mcp-config`; no hardcoded `mcp-none.json` fallback is injected.
-- Interactive sessions default `strictMcp` to `false`; strict MCP in interactive mode must be explicitly opted in.
-- `--am` flag reads persona from `P:\software\allmind\data\persona\allmind-voice.md`
-- When opening this repo, check if session brief shows `ACTION REQUIRED` — if so, offer to run `/update-memory`
+- Zero external dependencies. Keep core behavior in `mercenary.js`.
+- Windows-first implementation is intentional (`taskkill`, `wt`, `pwsh`).
+- Claude one-shot launches MUST include `--dangerously-skip-permissions`; one-shot adds `--no-session-persistence` unless `--resume` is used.
+- Pipeline role MUST enforce strict MCP isolation via `--strict-mcp-config` and MUST NOT inject a hardcoded `mcp-none.json` fallback.
+- Interactive sessions default `strictMcp` to `false`; strict MCP in interactive mode is explicit opt-in.
+- `codex` one-shot defaults to `--dangerously-bypass-approvals-and-sandbox --ephemeral` unless `sandbox` is explicitly provided.
+- Child env sanitization MUST remove `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, and `ANTHROPIC_API_KEY`.
+- Child `SHELL` MUST be forced to pwsh path for Windows automation consistency.
+- Every spawned process MUST be tracked in `.process-ledger.json` (`--ps`, `--audit`, `--purge` workflows depend on this).
+- `--am` reads persona from `P:\software\allmind\data\persona\allmind-voice.md`.
+- When opening this repo, check if session brief shows `ACTION REQUIRED` -- if so, offer to run `/update-memory`.
 
 ## Commands
 
 ```powershell
-node mercenary.js --prompt "test" --timeout 10   # One-shot
-node mercenary.js --interactive                    # Visible terminal
-node test/mercenary.test.js                        # Run tests
+node mercenary.js --prompt "test" --timeout 10
+node mercenary.js --prompt "test" --backend codex --timeout 10
+node mercenary.js --interactive
+node mercenary.js --ps
+node mercenary.js --audit
+node mercenary.js --purge
+node test/mercenary.test.js
 ```
 
 ## Project Memory System
