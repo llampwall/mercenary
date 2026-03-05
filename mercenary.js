@@ -336,9 +336,6 @@ function buildArgs(opts) {
     args.push('--resume', opts.resume);
   }
 
-  // System prompt override (distinct from --append-system-prompt persona injection)
-  if (opts.systemPrompt) args.push('--system-prompt', opts.systemPrompt);
-
   if (opts.allowedTools) args.push('--allowed-tools', opts.allowedTools);
   if (opts.model) args.push('--model', opts.model);
   // Role-based preset — callers declare what they are, not which flags they need.
