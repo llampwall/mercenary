@@ -329,6 +329,16 @@ function loadPersona(personaPath) {
 function buildArgs(opts) {
   const args = ['--dangerously-skip-permissions', '--no-session-persistence'];
 
+  // Resume a previous session -- requires session persistence, so remove the no-persistence flag
+  if (opts.resume) {
+    const idx = args.indexOf('--no-session-persistence');
+    if (idx !== -1) args.splice(idx, 1);
+    args.push('--resume', opts.resume);
+  }
+
+  // System prompt override (distinct from --append-system-prompt persona injection)
+  if (opts.systemPrompt) args.push('--system-prompt', opts.systemPrompt);
+
   if (opts.allowedTools) args.push('--allowed-tools', opts.allowedTools);
   if (opts.model) args.push('--model', opts.model);
   // Role-based preset — callers declare what they are, not which flags they need.
