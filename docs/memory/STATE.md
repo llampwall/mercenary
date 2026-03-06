@@ -31,6 +31,6 @@ Core implementation complete. Next: real CI, versioning workflow, role-preset te
 
 ---
 Last memory update: 2026-03-05
-Commits covered through: cbe5118694a34e8444239a6e4f0889dd697f0827
+Commits covered through: 65400c827adc65c5fb86991592d96cfa294371c2
 
-<!-- chinvex:last-commit:cbe5118694a34e8444239a6e4f0889dd697f0827 -->
+<!-- chinvex:last-commit:65400c827adc65c5fb86991592d96cfa294371c2 -->

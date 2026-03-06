@@ -12,11 +12,17 @@ import { setTimeout as sleep } from 'node:timers/promises';
 const ALLMIND_PERSONA_PATH = 'P:\\software\\allmind\\data\\persona\\allmind-voice.md';
 const KNOWN_CLAUDE_PATH = 'C:\\Users\\Jordan\\.local\\bin\\claude.exe';
 const GRACE_PERIOD_MS = 5000;
+const SAFE_CLI_CHARS = 20000;
 
 const LEDGER_PATH = join(import.meta.dirname, '.process-ledger.json');
 const SUSTAINED_DEATH_THRESHOLD = 3;   // consecutive dead checks before "resolved"
 const PURGE_MONITOR_MINUTES = 3;       // how long purge watches after killing
 const PURGE_CHECK_INTERVAL_MS = 15000; // 15s between purge checks
+
+function estimateArgLength(args) {
+  // Each arg: content + space separator + potential quoting overhead
+  return args.reduce((sum, a) => sum + a.length + 3, 0);
+}
 
 // --- Binary Resolution ---
 
@@ -435,7 +441,7 @@ function run(opts = {}) {
     if (!opts.prompt) return reject(new Error('prompt is required'));
 
     const backend = opts.backend || 'claude';
-    let binaryPath, spawnArgs, env;
+    let binaryPath, spawnArgs, env, useStdinForPrompt = false;
     try {
       if (backend === 'codex') {
         binaryPath = resolveCodexPath();
@@ -443,8 +449,16 @@ function run(opts = {}) {
         env = sanitizeEnvCodex(opts);
       } else {
         binaryPath = resolveClaudePath();
-        spawnArgs = ['-p', ...buildArgs(opts), opts.prompt];
+        const claudeArgs = buildArgs(opts);
+        spawnArgs = ['-p', ...claudeArgs, '--', opts.prompt];
         env = sanitizeEnv(opts);
+
+        // If total CLI length exceeds safe threshold, pipe prompt via stdin instead
+        if (estimateArgLength(spawnArgs) > SAFE_CLI_CHARS) {
+          // Remove positional prompt and '--' separator from args
+          spawnArgs = ['-p', ...claudeArgs];
+          useStdinForPrompt = true;
+        }
       }
     } catch (err) {
       return reject(err);
@@ -457,10 +471,17 @@ function run(opts = {}) {
       shell: false,
       windowsHide: true,
       detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [useStdinForPrompt ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       env
     });
     proc.unref();
+
+    if (useStdinForPrompt) {
+      proc.stdin.on('error', () => {}); // Swallow EPIPE if process exits early
+      proc.stdin.write(opts.prompt);
+      proc.stdin.end();
+    }
+
     try {
       ledgerRegister({ pid: proc.pid, backend, mode: 'oneshot', binaryPath, prompt: opts.prompt, cwd: opts.cwd || process.cwd() });
     } catch { /* ledger failure must not break spawning */ }
