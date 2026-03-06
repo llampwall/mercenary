@@ -1,95 +1,77 @@
 # Key Facts
 
 ## Quick start
-- Install: `npm install` (no external runtime deps, but keeps local npm workflow consistent).
-- Dev one-shot: `node mercenary.js --prompt "Reply with exactly: OK" --timeout 30`
-- Dev JSON one-shot: `node mercenary.js --prompt "Reply with exactly: OK" --json --timeout 30`
-- Dev interactive: `node mercenary.js --interactive --title "Mercenary"`
-- Test: `npm test` (runs `node test/mercenary.test.js`).
+- Install: `npm install`
+- One-shot (Claude default): `node mercenary.js --prompt "Reply with exactly: OK" --timeout 30`
+- One-shot (Codex): `node mercenary.js --prompt "Reply with exactly: OK" --backend codex --timeout 30`
+- JSON result mode: `node mercenary.js --prompt "Reply with exactly: OK" --json --timeout 30`
+- Interactive tab: `node mercenary.js --interactive --title "Mercenary"`
+- Tests: `npm test` (runs `node test/mercenary.test.js`)
 - Integration tests: `$env:MERCENARY_INTEGRATION=1; npm test`
-- Lint: no lint command is defined in `package.json`.
 
 ## Local development
-- Runtime: Node.js `>=22` (`package.json` engines).
-- Package manager: npm.
-- Module format: ESM (`"type": "module"`).
-- Env var names:
-  - `CLAUDE_PATH` (override Claude binary resolution).
-  - `MERCENARY_INTEGRATION` (enables integration tests).
-  - `CLAUDE_CODE_MAX_OUTPUT_TOKENS` (set in child env; default `65536` unless overridden by `--max-tokens`).
-  - `PWSH_PATH` (optional custom PowerShell path used for child `SHELL` assignment).
-  - `TEMP`, `TMP` (interactive mode sets both to a per-session temp directory for Claude child process isolation).
-  - `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY` (removed from child env by design).
-  - `.env.example` names: `SERVER_HOST`, `SERVER_PORT`, `UI_HOST`, `UI_PORT` (template values only).
-- Ports:
-  - Mercenary runtime uses no network ports.
-  - `.env.example` declares server `6969` and UI `5174` as template values.
-- Common paths:
-  - `mercenary.js` (single implementation file).
-  - `test/mercenary.test.js` (unit/CLI/integration-gated tests).
-  - `docs/specs/mercenary.md` (detailed behavior spec).
-  - `P:\\software\\allmind\\data\\persona\\allmind-voice.md` (`--am` persona default).
-  - `P:\\software\\allmind\\config\\mcp-none.json` (default empty MCP config for strict automation roles when `mcpConfig` is not provided).
-  - `C:\\Users\\Jordan\\.local\\bin\\claude.exe` (known local Claude path fallback).
-  - `%TEMP%\\mercenary-*` (per-session launcher/prompt directory created by `openSession()` and reused as child `TEMP`/`TMP`).
+- Runtime: Node.js `>=22`
+- Module format: ESM (`"type": "module"`)
+- Package manager: npm
+- Lint command: none defined in `package.json`
 
-## Environments
-- Dev: Windows host with `pwsh`, `wt`, and Claude CLI installed.
-- Staging: not defined in this repository.
-- Production: not defined in this repository.
+## Environment variable names
+- Binary resolution:
+  - `CLAUDE_PATH`
+  - `CODEX_PATH`
+- Backend auth:
+  - `CODEX_API_KEY`
+  - `OPENAI_API_KEY`
+- Test gate:
+  - `MERCENARY_INTEGRATION`
+- Child env behavior:
+  - Forced: `SHELL` -> `C:\Users\Jordan\AppData\Local\Microsoft\WindowsApps\pwsh.exe`
+  - Claude child sets: `CLAUDE_CODE_MAX_OUTPUT_TOKENS` (default `65536` or `--max-tokens`)
+  - Removed from child env: `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY`
+- Interactive temp isolation:
+  - `TEMP`, `TMP` are set to per-session temp directories in interactive Claude launches
+- `.env.example` placeholders:
+  - `SERVER_HOST`, `SERVER_PORT`, `UI_HOST`, `UI_PORT`
 
-## Deployment
-- Build: none (single-file Node CLI, no transpile/bundle step).
-- Deploy: no in-repo deployment pipeline; consumed directly as a local CLI/module.
-- Rollback: `git revert` + `npm test`.
-- Health checks: manual CLI smoke run and test suite.
+## Paths
+- Core implementation: `mercenary.js`
+- Tests: `test/mercenary.test.js`
+- Behavior spec: `docs/specs/mercenary.md`
+- Canonical notes: `docs/project_notes/`
+- Process ledger file: `.process-ledger.json`
+- AllMind persona file for `--am`: `P:\software\allmind\data\persona\allmind-voice.md`
+- Known Claude fallback path: `C:\Users\Jordan\.local\bin\claude.exe`
+- Interactive temp workspaces: `%TEMP%\mercenary-*`
 
-## Data and storage
-- Primary datastore: none.
-- Object storage: none.
-- Backups: git history only.
+## Runtime and platform facts
+- Platform target is Windows (`taskkill`, `wt`, `pwsh` usage in code paths).
+- Mercenary runtime does not bind network ports.
+- `.env.example` contains template values only (`6969`, `5174`), not active runtime ports.
+- Main spawn paths use `shell: false`.
 
-## External services
-- GitHub Actions workflow: `.github/workflows/ci.yml` (placeholder sanity job).
-- Claude CLI executable: resolved via `CLAUDE_PATH`, then known path fallback, then `where.exe claude`.
-- AllMind integration: Mercenary provides spawn primitives; API routes live in AllMind, not this repo.
-
-## Observability
-- Runtime output: stdout/stderr from spawned Claude process.
-- Local logs directory: `logs/` (gitignored except `logs/.keep`).
-- Metrics: none implemented.
-- Alerts: none implemented.
-
-## Repo map
-- `.`: Node CLI/module repo with one source file and tests.
-- `docs/project_notes/`: canonical memory notes.
-- `docs/memory/`: legacy notes; non-canonical unless explicitly migrated.
-- `scripts/` and `tools/`: required location for automation scripts.
-- `.github/workflows/ci.yml`: placeholder CI workflow.
+## CI and deployment
+- CI workflow: `.github/workflows/ci.yml` currently runs a placeholder sanity echo.
+- Build step: none (single-file Node CLI/module).
+- Deploy model: local CLI/module consumption; no in-repo production pipeline.
 
 ## Operational commands
 - Run tests: `npm test`
-- One-shot JSON run: `node mercenary.js --prompt "Reply with exactly: OK" --json --timeout 30`
-- Open interactive session: `node mercenary.js --interactive --system-prompt .\\prompt.txt "Begin observing."`
-- Kill an existing process tree: `node mercenary.js --kill <pid>`
-- Programmatic role preset sample:
+- Show tracked processes: `node mercenary.js --ps`
+- Audit processes and discover orphans: `node mercenary.js --audit`
+- Purge tracked processes: `node mercenary.js --purge`
+- Kill a process tree: `node mercenary.js --kill <pid>`
+- Sample module call:
   - `node --input-type=module -e "import { run } from './mercenary.js'; run({ prompt: 'Reply with exactly: OK', role: 'pipeline', timeout: 30 }).then(r => console.log(r.exitCode));"`
-- Search files: `rg --files`
-- View recent commits: `git log --oneline -n 10`
 
-## Deprecations and gotchas
-- Keep `shell: false` for the main Claude process spawn path in `mercenary.js`.
-- Interactive mode requires both Windows Terminal (`wt`) and PowerShell (`pwsh`).
-- `--no-session-persistence` is used in one-shot (`run`) launches; interactive sessions intentionally omit it.
-- CLI parser ignores unknown flags; several options are module-only today (`role`, `streaming`, `strictMcp`, `mcpConfig`, `onStart`, `onData`).
-- `pipeline` preset intentionally defaults to strict MCP isolation with `mcp-none.json` fallback when `mcpConfig` is not provided.
-- Interactive sessions default `strictMcp` to `false`; strict MCP in interactive mode is explicit opt-in and should be smoke-tested.
-- Interactive sessions intentionally isolate child `TEMP`/`TMP`; avoid overriding these values to shared paths in wrapper scripts.
-- Line endings are LF by default; only `.bat`/`.cmd` use CRLF.
-- Do not store secrets in repo notes or committed env files; document env var names only.
+## Gotchas
+- Interactive mode requires both Windows Terminal (`wt`) and PowerShell (`pwsh`) on PATH.
+- `pipeline` role on Claude enforces strict MCP isolation via `--strict-mcp-config`; no hardcoded fallback MCP config is injected.
+- Interactive mode defaults `strictMcp` to `false`; strict mode is explicit opt-in.
+- Codex backend ignores Claude-only options such as `allowedTools`, `maxTurns`, `mcpConfig`, and `strictMcp`.
+- Do not store secrets in notes; document env var names and secret injection locations only.
 
 ## Linkouts
-- Operating brief: `docs/project_notes/operating_brief.md`
-- ADR constraints: `docs/project_notes/adrs.md`
-- Bug playbook: `docs/project_notes/bugs.md`
-- Work checkpoints: `docs/project_notes/worklog.md`
+- `docs/project_notes/operating_brief.md`
+- `docs/project_notes/adrs.md`
+- `docs/project_notes/bugs.md`
+- `docs/project_notes/worklog.md`
