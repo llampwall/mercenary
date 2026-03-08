@@ -5,7 +5,7 @@
 
 import { spawn, execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdtempSync, existsSync, renameSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -24,22 +24,64 @@ function estimateArgLength(args) {
   return args.reduce((sum, a) => sum + a.length + 3, 0);
 }
 
+function resolveExecutableCandidate(candidatePath) {
+  if (!candidatePath) return null;
+  if (process.platform === 'win32' && !/\.[A-Za-z0-9]+$/.test(candidatePath)) {
+    for (const suffix of ['.cmd', '.exe', '.bat']) {
+      const withSuffix = `${candidatePath}${suffix}`;
+      if (existsSync(withSuffix)) return withSuffix;
+    }
+  }
+  if (existsSync(candidatePath)) return candidatePath;
+  return null;
+}
+
+function resolveCodexNativeExecutable(candidatePath) {
+  if (!candidatePath || process.platform !== 'win32') return null;
+
+  const normalized = candidatePath.replace(/\//g, '\\').toLowerCase();
+  if (!/(^|\\)codex(\.cmd|\.bat)?$/.test(normalized)) return null;
+
+  const shimDir = dirname(candidatePath);
+  const vendorCandidates = [
+    join(
+      shimDir,
+      'node_modules', '@openai', 'codex', 'node_modules', '@openai',
+      'codex-win32-x64', 'vendor', 'x86_64-pc-windows-msvc', 'codex', 'codex.exe'
+    ),
+    join(
+      shimDir,
+      'node_modules', '@openai', 'codex', 'node_modules', '@openai',
+      'codex-win32-arm64', 'vendor', 'aarch64-pc-windows-msvc', 'codex', 'codex.exe'
+    ),
+  ];
+
+  for (const vendorPath of vendorCandidates) {
+    if (existsSync(vendorPath)) return vendorPath;
+  }
+
+  return null;
+}
+
 // --- Binary Resolution ---
 
 function resolveBinary({ envVar, knownPaths = [], whereName, notFoundMsg }) {
   if (process.env[envVar]) {
-    if (existsSync(process.env[envVar])) return process.env[envVar];
+    const resolvedEnvPath = resolveExecutableCandidate(process.env[envVar]);
+    if (resolvedEnvPath) return resolvedEnvPath;
     throw new Error(`${envVar} set to "${process.env[envVar]}" but file not found.`);
   }
   for (const p of knownPaths) {
-    if (existsSync(p)) return p;
+    const resolvedKnownPath = resolveExecutableCandidate(p);
+    if (resolvedKnownPath) return resolvedKnownPath;
   }
   try {
     const result = execSync(`where.exe ${whereName}`, {
       windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']
     });
     const found = result.trim().split(/\r?\n/)[0].trim();
-    if (found && existsSync(found)) return found;
+    const resolvedFoundPath = resolveExecutableCandidate(found);
+    if (resolvedFoundPath) return resolvedFoundPath;
   } catch { /* not in PATH */ }
   throw new Error(notFoundMsg);
 }
@@ -54,11 +96,38 @@ function resolveClaudePath() {
 }
 
 function resolveCodexPath() {
-  return resolveBinary({
+  const resolved = resolveBinary({
     envVar: 'CODEX_PATH',
     whereName: 'codex',
     notFoundMsg: 'codex binary not found. Set CODEX_PATH or run: npm install -g @openai/codex',
   });
+  return resolveCodexNativeExecutable(resolved) || resolved;
+}
+
+function collectCodexConfigPaths(cwd = process.cwd()) {
+  const paths = [];
+  const homeDir = process.env.USERPROFILE || process.env.HOME;
+  if (homeDir) paths.push(join(homeDir, '.codex', 'config.toml'));
+  if (cwd) paths.push(join(cwd, '.codex', 'config.toml'));
+  return paths.filter((p, index, arr) => arr.indexOf(p) === index && existsSync(p));
+}
+
+function collectCodexMcpServerNames(cwd = process.cwd()) {
+  const names = new Set();
+  const sectionPattern = /^\[mcp_servers\.([^. \]\r\n]+)(?:[.\]])/gm;
+
+  for (const configPath of collectCodexConfigPaths(cwd)) {
+    try {
+      const raw = readFileSync(configPath, 'utf8');
+      for (const match of raw.matchAll(sectionPattern)) {
+        if (match[1]) names.add(match[1]);
+      }
+    } catch {
+      // Ignore malformed or unreadable optional config files.
+    }
+  }
+
+  return Array.from(names).sort();
 }
 
 // --- Environment Sanitization ---
@@ -392,10 +461,10 @@ function buildCodexArgs(opts, warn = (msg) => process.stderr.write(`mercenary: $
   const args = [];
 
   // Approval + sandbox policy.
-  // If opts.sandbox is set, use an explicit sandbox mode + never-approve instead of full bypass.
+  // If opts.sandbox is set, keep the sandbox and force non-interactive approval via config.
   // Otherwise default to full bypass (suitable for trusted automation).
   if (opts.sandbox) {
-    args.push('--sandbox', opts.sandbox, '--ask-for-approval', 'never');
+    args.push('--sandbox', opts.sandbox, '--config', 'approval_policy="never"');
   } else {
     args.push('--dangerously-bypass-approvals-and-sandbox');
   }
@@ -405,6 +474,12 @@ function buildCodexArgs(opts, warn = (msg) => process.stderr.write(`mercenary: $
 
   if (opts.role === 'pipeline' || opts.streaming) {
     args.push('--json');
+  }
+
+  if (opts.disableMcp) {
+    for (const name of collectCodexMcpServerNames(opts.cwd)) {
+      args.push('--config', `mcp_servers.${name}.enabled=false`);
+    }
   }
 
   // Persona + appendSystemPrompt combined as --config developer_instructions.
@@ -447,6 +522,10 @@ function run(opts = {}) {
         binaryPath = resolveCodexPath();
         spawnArgs = ['exec', ...buildCodexArgs(opts)];
         env = sanitizeEnvCodex(opts);
+        if (estimateArgLength(spawnArgs) > SAFE_CLI_CHARS || opts.prompt.includes('\n')) {
+          spawnArgs = ['exec', ...buildCodexArgs({ ...opts, prompt: '-' })];
+          useStdinForPrompt = true;
+        }
       } else {
         binaryPath = resolveClaudePath();
         const claudeArgs = buildArgs(opts);

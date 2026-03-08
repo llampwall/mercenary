@@ -108,7 +108,7 @@ Wraps the [OpenAI Codex CLI](https://github.com/openai/codex).
 | `--persona <path>` | ✅ | File is read and passed as `developer_instructions` (no XML wrapper) |
 | `--am` | ✅ | Reads AllMind persona file and passes as `developer_instructions` |
 | `--json` / JSONL output | ✅ via `role: 'pipeline'` | Maps to `codex exec --json` |
-| `opts.sandbox` | ✅ | `--sandbox read-only\|workspace-write\|danger-full-access` + `--ask-for-approval never`; replaces default yolo mode |
+| `opts.sandbox` | ✅ | `--sandbox read-only\|workspace-write\|danger-full-access` + `--config approval_policy="never"`; replaces default full-bypass mode |
 | MCP servers | ✅ (external config) | Codex loads MCP servers from `~/.codex/config.toml` and `.codex/config.toml`; use `codex mcp add` to configure. Not controlled via mercenary opts. |
 | `--allowed-tools` | ❌ | No direct equivalent; use `opts.sandbox` to restrict filesystem access |
 | `--max-turns` | ❌ | No codex equivalent — warning printed, ignored |
@@ -148,6 +148,7 @@ const result = await run({
   appendSystemPrompt: 'Be brief',
   persona: 'C:/path/persona.md', // claude: --append-system-prompt with XML wrap; codex: developer_instructions
   sandbox: 'workspace-write',    // codex only: read-only | workspace-write | danger-full-access
+  disableMcp: true,              // codex only: disable MCP servers discovered from ~/.codex/config.toml and .codex/config.toml
   mcpConfig: 'C:/path/mcp.json', // claude only
   strictMcp: true,               // claude only
   cwd: 'C:/project',

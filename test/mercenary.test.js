@@ -1,8 +1,8 @@
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execSync } from 'node:child_process';
-import { writeFileSync, readFileSync, mkdtempSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { writeFileSync, readFileSync, mkdtempSync, existsSync, mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 // Import module exports
@@ -80,6 +80,46 @@ describe('resolveCodexPath', () => {
     }
   });
 
+  it('uses CODEX_PATH with .cmd suffix when env var omits the extension', () => {
+    const original = process.env.CODEX_PATH;
+    const tmpDir = mkdtempSync(join(tmpdir(), 'merc-codex-path-'));
+    const basePath = join(tmpDir, 'codex-shim');
+    const shimPath = `${basePath}.cmd`;
+    writeFileSync(basePath, 'placeholder');
+    writeFileSync(shimPath, '@echo off\r\necho codex shim\r\n');
+    try {
+      process.env.CODEX_PATH = basePath;
+      const p = resolveCodexPath();
+      assert.equal(p, shimPath);
+    } finally {
+      if (original) process.env.CODEX_PATH = original;
+      else delete process.env.CODEX_PATH;
+    }
+  });
+
+  it('prefers the vendored codex.exe over the npm shim on Windows', () => {
+    const original = process.env.CODEX_PATH;
+    const tmpDir = mkdtempSync(join(tmpdir(), 'merc-codex-vendor-'));
+    const shimBase = join(tmpDir, 'codex');
+    const shimPath = `${shimBase}.cmd`;
+    const vendorExe = join(
+      tmpDir,
+      'node_modules', '@openai', 'codex', 'node_modules', '@openai',
+      'codex-win32-x64', 'vendor', 'x86_64-pc-windows-msvc', 'codex', 'codex.exe'
+    );
+    writeFileSync(shimPath, '@echo off\r\necho codex shim\r\n');
+    mkdirSync(dirname(vendorExe), { recursive: true });
+    writeFileSync(vendorExe, 'placeholder');
+    try {
+      process.env.CODEX_PATH = shimBase;
+      const p = resolveCodexPath();
+      assert.equal(p, vendorExe);
+    } finally {
+      if (original) process.env.CODEX_PATH = original;
+      else delete process.env.CODEX_PATH;
+    }
+  });
+
   it('throws when CODEX_PATH points to a nonexistent file', () => {
     const original = process.env.CODEX_PATH;
     try {
@@ -144,14 +184,15 @@ describe('buildCodexArgs', () => {
     assert.ok(!args.includes('--sandbox'));
   });
 
-  it('opts.sandbox replaces yolo with --sandbox + --ask-for-approval never', () => {
+  it('opts.sandbox replaces full bypass with --sandbox + approval_policy=never', () => {
     const args = buildCodexArgs({ prompt: 'hello', sandbox: 'workspace-write' });
     assert.ok(!args.includes('--dangerously-bypass-approvals-and-sandbox'));
     const sidx = args.indexOf('--sandbox');
     assert.ok(sidx >= 0);
     assert.strictEqual(args[sidx + 1], 'workspace-write');
-    assert.ok(args.includes('--ask-for-approval'));
-    assert.strictEqual(args[args.indexOf('--ask-for-approval') + 1], 'never');
+    const cidx = args.indexOf('--config');
+    assert.ok(cidx >= 0);
+    assert.strictEqual(args[cidx + 1], 'approval_policy="never"');
   });
 
   it('includes --ephemeral', () => {
@@ -162,6 +203,32 @@ describe('buildCodexArgs', () => {
   it('pipeline role adds --json', () => {
     const args = buildCodexArgs({ prompt: 'hello', role: 'pipeline' });
     assert.ok(args.includes('--json'));
+  });
+
+  it('disableMcp adds per-server config overrides from codex config files', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'merc-codex-mcp-'));
+    const configDir = join(tmpDir, '.codex');
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(
+      join(configDir, 'config.toml'),
+      [
+        '[mcp_servers.context7]',
+        'url = "https://example.com/mcp"',
+        '',
+        '[mcp_servers.playwright]',
+        'command = "npx"',
+        '',
+        '[mcp_servers.context7.http_headers]',
+        'TOKEN = "abc"',
+      ].join('\n'),
+      'utf8'
+    );
+
+    const args = buildCodexArgs({ prompt: 'hello', sandbox: 'workspace-write', disableMcp: true, cwd: tmpDir });
+    const configValues = args.flatMap((value, index) => args[index - 1] === '--config' ? [value] : []);
+
+    assert.ok(configValues.includes('mcp_servers.context7.enabled=false'));
+    assert.ok(configValues.includes('mcp_servers.playwright.enabled=false'));
   });
 
   it('default role has no --json', () => {
