@@ -1,6 +1,8 @@
 # mercenary
 
-Windows subprocess manager for AI coding agents. Wraps the `claude` (Claude Code) and `codex` (OpenAI Codex CLI) binaries with correct process isolation, environment sanitization, timeout enforcement, and Windows Terminal integration.
+Windows subprocess manager for AI coding agents. It wraps the `claude` (Claude Code) and `codex` (OpenAI Codex CLI) binaries with shared lifecycle handling on Windows: binary resolution, environment sanitization, timeout enforcement, process-tree cleanup, and Windows Terminal launchers.
+
+Mercenary is not a backend-neutral abstraction layer. It exposes one API surface, but the Claude and Codex backends have different native capabilities, different config models, and different Windows behavior. Backend-specific behavior is explicit in this README and in the code.
 
 Single file (`mercenary.js`), zero dependencies, Node.js 22 ESM.
 
@@ -13,6 +15,18 @@ Single file (`mercenary.js`), zero dependencies, Node.js 22 ESM.
 - **Claude backend:** `claude` CLI installed — `npm install -g @anthropic-ai/claude-code`
 - **Codex backend:** `codex` CLI installed — `npm install -g @openai/codex` _(optional)_
 - **Interactive mode:** Windows Terminal (`wt`) on PATH
+
+---
+
+## Design Reality
+
+Mercenary shares process-management plumbing across backends, but it does not make Claude and Codex interchangeable.
+
+- Shared across backends: process spawning, timeout kill, PID tracking, env cleanup, working-directory control, interactive Windows Terminal launch, and result shape.
+- Claude-specific: tool allowlists, max turns, max output tokens, output-format handling, strict MCP config, system-prompt file loading, and most role presets.
+- Codex-specific: `codex exec`, `developer_instructions` via `--config`, sandbox/approval policy mapping, optional per-run MCP disable overrides, and Codex-native AGENTS/config behavior.
+
+If you are choosing a backend, treat Mercenary as a common Windows launcher plus backend adapters, not as a promise of feature parity.
 
 ---
 
@@ -84,16 +98,18 @@ Wraps the [Claude Code](https://github.com/anthropics/claude-code) CLI.
 
 - **One-shot:** `claude -p <prompt> [flags]`
 - **Interactive:** opens `claude` in a Windows Terminal tab via a generated PowerShell launcher
-- All flags are supported
+- This is the more feature-complete backend in Mercenary today
 
 ### `codex`
 
 Wraps the [OpenAI Codex CLI](https://github.com/openai/codex).
 
-- **One-shot:** `codex exec --dangerously-bypass-approvals-and-sandbox --ephemeral <prompt>`
+- **One-shot:** `codex exec [mapped flags] <prompt>`
 - **Interactive:** opens `codex` in a Windows Terminal tab
 - Install: `npm install -g @openai/codex`
 - Set `CODEX_API_KEY` or `OPENAI_API_KEY` in your environment for authentication
+- Mercenary uses a subset mapping here, not a Claude-compatible mirror
+- On Windows, Mercenary prefers the native vendored `codex.exe` under the npm install over the `.cmd` shim
 
 **Feature availability on the codex backend:**
 
@@ -108,8 +124,9 @@ Wraps the [OpenAI Codex CLI](https://github.com/openai/codex).
 | `--persona <path>` | ✅ | File is read and passed as `developer_instructions` (no XML wrapper) |
 | `--am` | ✅ | Reads AllMind persona file and passes as `developer_instructions` |
 | `--json` / JSONL output | ✅ via `role: 'pipeline'` | Maps to `codex exec --json` |
-| `opts.sandbox` | ✅ | `--sandbox read-only\|workspace-write\|danger-full-access` + `--config approval_policy="never"`; replaces default full-bypass mode |
-| MCP servers | ✅ (external config) | Codex loads MCP servers from `~/.codex/config.toml` and `.codex/config.toml`; use `codex mcp add` to configure. Not controlled via mercenary opts. |
+| `opts.sandbox` | ✅ | `--sandbox read-only\|workspace-write\|danger-full-access` + `--config approval_policy="never"`; `role: 'pipeline'` defaults this to `workspace-write` |
+| `disableMcp` | ✅ | Adds per-server `enabled=false` overrides for MCP servers discovered in `~/.codex/config.toml` and `<cwd>/.codex/config.toml`; enabled by default for Codex `pipeline`, `allmind`, and interactive `coordinator` |
+| MCP servers | ✅ (Codex-native config) | Codex loads MCP servers from `~/.codex/config.toml` and `.codex/config.toml`; Mercenary can only disable discovered servers per run, not replace Codex's MCP system |
 | `--allowed-tools` | ❌ | No direct equivalent; use `opts.sandbox` to restrict filesystem access |
 | `--max-turns` | ❌ | No codex equivalent — warning printed, ignored |
 | `--max-tokens` | ❌ | No codex equivalent |
@@ -117,7 +134,7 @@ Wraps the [OpenAI Codex CLI](https://github.com/openai/codex).
 | `--system-prompt <path>` | ❌ | Claude interactive only; use `--persona` or `--append-system-prompt` instead |
 | `--strict-mcp-config` / `mcpConfig` | ❌ | Not applicable; codex manages MCP via its own config system |
 
-**MCP on codex:** Codex uses `~/.codex/config.toml` for MCP server definitions. Per-server you can set `enabled = false`, `enabled_tools = [...]`, or `disabled_tools = [...]`. Run `codex mcp add <name>` to register servers. Mercenary does not generate or inject MCP config for codex — manage it directly in `config.toml`.
+**MCP on codex:** Codex uses `~/.codex/config.toml` and `.codex/config.toml` for MCP server definitions. Mercenary does not own that system. The only Codex-side MCP control Mercenary currently provides is `disableMcp: true`, which discovers configured server names and injects per-run `mcp_servers.<name>.enabled=false` overrides. It does not provide Claude-style `mcpConfig` or `strictMcp` semantics for Codex.
 
 **AGENTS.md:** Codex reads `AGENTS.md` files as a persistent instruction layer before each task. Place project-specific instructions in `<project>/.codex/AGENTS.md` or global defaults in `~/.codex/AGENTS.md`. This is separate from `developer_instructions` (which mercenary injects via `--persona` / `--append-system-prompt`) and stacks on top of it.
 
@@ -147,8 +164,8 @@ const result = await run({
   verbose: true,                 // claude only, with outputFormat
   appendSystemPrompt: 'Be brief',
   persona: 'C:/path/persona.md', // claude: --append-system-prompt with XML wrap; codex: developer_instructions
-  sandbox: 'workspace-write',    // codex only: read-only | workspace-write | danger-full-access
-  disableMcp: true,              // codex only: disable MCP servers discovered from ~/.codex/config.toml and .codex/config.toml
+  sandbox: 'workspace-write',    // codex only: read-only | workspace-write | danger-full-access; pipeline defaults to workspace-write
+  disableMcp: true,              // codex only: disable MCP servers discovered from ~/.codex/config.toml and .codex/config.toml; default for pipeline/allmind
   mcpConfig: 'C:/path/mcp.json', // claude only
   strictMcp: true,               // claude only
   cwd: 'C:/project',
@@ -214,13 +231,13 @@ Returns the path to the `codex` binary. Checks `CODEX_PATH` env var first, then 
 
 ## Roles
 
-Roles are presets — callers declare *what they are*, not which flags they need.
+Roles are presets, not a cross-backend contract. The same role name can map to materially different behavior on Claude vs Codex.
 
 | Role | Mode | claude behavior | codex behavior |
 |---|---|---|---|
-| `'pipeline'` | one-shot | `--output-format stream-json --verbose --strict-mcp-config` | `--json` (JSONL streaming output) |
-| `'allmind'` | one-shot | `--output-format text` + AllMind persona injection | AllMind persona as `developer_instructions` + `--config personality=pragmatic` |
-| `'coordinator'` | interactive | `allowedTools` defaults to `Bash,Read,Edit,Write,Glob,Grep` | `sandbox` defaults to `workspace-write`; codex default `approval_policy` (`on-request`) provides the supervised interaction pattern |
+| `'pipeline'` | one-shot | `--output-format stream-json --verbose --strict-mcp-config` | `--json`, `sandbox=workspace-write` by default, plus default per-run MCP disable overrides for discovered Codex MCP servers |
+| `'allmind'` | one-shot | `--output-format text` + AllMind persona injection | AllMind persona as `developer_instructions` + `--config personality=pragmatic`, with MCP disabled by default |
+| `'coordinator'` | interactive | `allowedTools` defaults to `Bash,Read,Edit,Write,Glob,Grep` | `sandbox` defaults to `workspace-write`; Codex default `approval_policy` (`on-request`) provides the supervised interaction pattern, with MCP disabled by default |
 
 The `streaming: true` option is a legacy alias for `role: 'pipeline'`.
 
@@ -258,7 +275,10 @@ The `streaming: true` option is a legacy alias for `role: 'pipeline'`.
 - Double-kill: a second `taskkill` fires after 5s grace period to handle stubborn processes
 - Exit code `124` on timeout (matches `timeout(1)` convention)
 
-**Note on Windows console window flashing:** When mercenary spawns an agent headlessly (`windowsHide: true`), the agent process has no inherited console. Child processes spawned by the agent (tool executions, MCP servers) may briefly create visible console windows. This is a known [Claude Code bug (#14828)](https://github.com/anthropics/claude-code/issues/14828) — the fix requires `windowsHide` to be added to Claude Code's internal spawn calls. The `pipeline` role mitigates the MCP server portion by suppressing MCP server loading via `--strict-mcp-config`.
+**Note on Windows console window flashing:** `windowsHide: true` only applies to the top-level Mercenary child. Descendant processes spawned by the backend may still create visible windows on Windows.
+
+- Claude: child tool or MCP processes can still flash visible console windows. The `pipeline` role mitigates the MCP-server portion by suppressing MCP loading via `--strict-mcp-config`.
+- Codex: even with `disableMcp: true`, Codex may still spawn visible `pwsh`, `git`, or `conhost` children during tool execution on Windows. That is backend behavior, not something Mercenary fully suppresses.
 
 ---
 

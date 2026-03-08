@@ -130,6 +130,30 @@ function collectCodexMcpServerNames(cwd = process.cwd()) {
   return Array.from(names).sort();
 }
 
+function shouldDisableCodexMcp(opts = {}, mode = 'oneshot') {
+  if (opts.disableMcp !== undefined) return Boolean(opts.disableMcp);
+
+  if (mode === 'interactive') {
+    return opts.role === 'coordinator' || opts.role === 'allmind';
+  }
+
+  return Boolean(opts.role === 'pipeline' || opts.streaming || opts.role === 'allmind');
+}
+
+function getDefaultCodexSandbox(opts = {}, mode = 'oneshot') {
+  if (opts.sandbox) return opts.sandbox;
+
+  if (mode === 'interactive') {
+    return opts.role === 'coordinator' ? 'workspace-write' : undefined;
+  }
+
+  if (opts.role === 'pipeline' || opts.streaming) {
+    return 'workspace-write';
+  }
+
+  return undefined;
+}
+
 // --- Environment Sanitization ---
 
 function sanitizeEnv(opts = {}) {
@@ -463,8 +487,9 @@ function buildCodexArgs(opts, warn = (msg) => process.stderr.write(`mercenary: $
   // Approval + sandbox policy.
   // If opts.sandbox is set, keep the sandbox and force non-interactive approval via config.
   // Otherwise default to full bypass (suitable for trusted automation).
-  if (opts.sandbox) {
-    args.push('--sandbox', opts.sandbox, '--config', 'approval_policy="never"');
+  const sandbox = getDefaultCodexSandbox(opts, 'oneshot');
+  if (sandbox) {
+    args.push('--sandbox', sandbox, '--config', 'approval_policy="never"');
   } else {
     args.push('--dangerously-bypass-approvals-and-sandbox');
   }
@@ -476,7 +501,7 @@ function buildCodexArgs(opts, warn = (msg) => process.stderr.write(`mercenary: $
     args.push('--json');
   }
 
-  if (opts.disableMcp) {
+  if (shouldDisableCodexMcp(opts, 'oneshot')) {
     for (const name of collectCodexMcpServerNames(opts.cwd)) {
       args.push('--config', `mcp_servers.${name}.enabled=false`);
     }
@@ -639,8 +664,13 @@ async function openSessionCodex(opts, title, tmpBase) {
   //                        (pauses for human approval before each action) which is exactly right.
   //                        Apply workspace-write sandbox as a sensible safety boundary.
   // role: 'allmind'     → persona injection (handled below) + pragmatic personality.
-  const sandbox = opts.sandbox ?? (opts.role === 'coordinator' ? 'workspace-write' : undefined);
+  const sandbox = getDefaultCodexSandbox(opts, 'interactive');
   if (sandbox) codexArgs.push(`--sandbox "${sandbox}"`);
+  if (shouldDisableCodexMcp(opts, 'interactive')) {
+    for (const name of collectCodexMcpServerNames(opts.cwd)) {
+      codexArgs.push('--config', `mcp_servers.${name}.enabled=false`);
+    }
+  }
   if (opts.role === 'allmind') codexArgs.push('--config', 'personality=pragmatic');
 
   // Persona + appendSystemPrompt as developer_instructions (write to temp file)

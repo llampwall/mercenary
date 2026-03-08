@@ -205,6 +205,75 @@ describe('buildCodexArgs', () => {
     assert.ok(args.includes('--json'));
   });
 
+  it('pipeline role defaults sandbox to workspace-write', () => {
+    const args = buildCodexArgs({ prompt: 'hello', role: 'pipeline' });
+    assert.ok(!args.includes('--dangerously-bypass-approvals-and-sandbox'));
+    const sidx = args.indexOf('--sandbox');
+    assert.ok(sidx >= 0);
+    assert.strictEqual(args[sidx + 1], 'workspace-write');
+  });
+
+  it('pipeline role disables discovered MCP servers by default', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'merc-codex-pipeline-mcp-'));
+    const configDir = join(tmpDir, '.codex');
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(
+      join(configDir, 'config.toml'),
+      [
+        '[mcp_servers.context7]',
+        'url = "https://example.com/mcp"',
+        '',
+        '[mcp_servers.playwright]',
+        'command = "npx"',
+      ].join('\n'),
+      'utf8'
+    );
+
+    const args = buildCodexArgs({ prompt: 'hello', role: 'pipeline', cwd: tmpDir });
+    const configValues = args.flatMap((value, index) => args[index - 1] === '--config' ? [value] : []);
+
+    assert.ok(configValues.includes('mcp_servers.context7.enabled=false'));
+    assert.ok(configValues.includes('mcp_servers.playwright.enabled=false'));
+  });
+
+  it('disableMcp false preserves configured MCP servers for pipeline role', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'merc-codex-pipeline-no-mcp-'));
+    const configDir = join(tmpDir, '.codex');
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(
+      join(configDir, 'config.toml'),
+      [
+        '[mcp_servers.context7]',
+        'url = "https://example.com/mcp"',
+      ].join('\n'),
+      'utf8'
+    );
+
+    const args = buildCodexArgs({ prompt: 'hello', role: 'pipeline', disableMcp: false, cwd: tmpDir });
+    const configValues = args.flatMap((value, index) => args[index - 1] === '--config' ? [value] : []);
+
+    assert.ok(!configValues.includes('mcp_servers.context7.enabled=false'));
+  });
+
+  it('allmind role disables discovered MCP servers by default', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'merc-codex-allmind-mcp-'));
+    const configDir = join(tmpDir, '.codex');
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(
+      join(configDir, 'config.toml'),
+      [
+        '[mcp_servers.context7]',
+        'url = "https://example.com/mcp"',
+      ].join('\n'),
+      'utf8'
+    );
+
+    const args = buildCodexArgs({ prompt: 'hello', role: 'allmind', cwd: tmpDir });
+    const configValues = args.flatMap((value, index) => args[index - 1] === '--config' ? [value] : []);
+
+    assert.ok(configValues.includes('mcp_servers.context7.enabled=false'));
+  });
+
   it('disableMcp adds per-server config overrides from codex config files', () => {
     const tmpDir = mkdtempSync(join(tmpdir(), 'merc-codex-mcp-'));
     const configDir = join(tmpDir, '.codex');
