@@ -30,7 +30,7 @@ Core implementation complete. Next: real CI, versioning workflow, role-preset te
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-03-05
-Commits covered through: 65400c827adc65c5fb86991592d96cfa294371c2
+Last memory update: 2026-03-06
+Commits covered through: 1161a3a8d98397f7766adb1089498e9511332dd7
 
-<!-- chinvex:last-commit:65400c827adc65c5fb86991592d96cfa294371c2 -->
+<!-- chinvex:last-commit:1161a3a8d98397f7766adb1089498e9511332dd7 -->

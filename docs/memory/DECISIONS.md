@@ -4,12 +4,12 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Stdin piping fallback when CLI args exceed 20K chars — avoids Windows 32K command line limit during Core dispatch with large context injections
 - Added `openHeadlessSession()` for persistent headless Claude sessions via stdin/stdout pipe (no terminal window)
 - Added `--resume <id>` support in `run()` for session continuity across calls; strips `--no-session-persistence` when resuming
 - Reverted `--system-prompt` addition from `buildArgs()`; `--append-system-prompt` (appendSystemPrompt) is the correct persona injection mechanism
 - Bootstrapped `docs/memory/` tracking system and chinvex SessionStart hook via `.claude/settings.json`
 - Added Codex backend plan (`docs/plans/2026-02-27-codex-backend.md`) for routing calls through `codex exec`
-- SHELL forced to `pwsh` (App Execution Alias); MCP suppression via `--strict-mcp-config` only; TEMP/TMP isolated per session
 
 ## 2026-03
 
@@ -24,6 +24,12 @@
 - **Why:** Callers needed session continuity across `run()` invocations — resume a prior Claude session by ID.
 - **Impact:** `run(opts)` now accepts `resume` option. When set, `--no-session-persistence` is omitted and `--resume <id>` is passed to claude CLI.
 - **Evidence:** d30f19f
+
+### 2026-03-06 — Stdin piping fallback for large CLI args
+
+- **Why:** Windows caps command line length at ~32,767 chars. Core dispatch injecting registry, perception, working memory, and chinvex context can exceed this, causing silent truncation or spawn failures.
+- **Impact:** `run()` now calls `estimateArgLength(spawnArgs)` before spawn. When length > `SAFE_CLI_CHARS` (20K), the positional prompt and `--` separator are removed from args, stdin is opened as `'pipe'`, and the prompt is written then closed. Short prompts use the original positional arg path unchanged. Codex backend unaffected.
+- **Evidence:** 6136006
 
 ### 2026-03-05 — Reverted --system-prompt from buildArgs()
 

@@ -10,6 +10,7 @@
 - Windows-only: depends on `wt` (Windows Terminal) and `pwsh` for interactive mode
 - Process tree kill via `taskkill /T /F /PID` — no Unix `kill` signal chains
 - Canonical project memory: `docs/project_notes/` (ADR-001); `docs/memory/` is legacy/non-canonical
+- Windows CLI arg limit: 32,767 chars; `run()` switches to stdin piping when `estimateArgLength(spawnArgs) > 20K` (`SAFE_CLI_CHARS`) to avoid truncation (added 2026-03-06)
 
 ## Rules
 - Always set `--dangerously-skip-permissions` on every spawned claude process (updated 2026-02-25)
