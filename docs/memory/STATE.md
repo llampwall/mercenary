@@ -4,7 +4,7 @@
 # State
 
 ## Current Objective
-Core implementation complete. Next: real CI, versioning workflow, role-preset test coverage, and Codex backend.
+Core implementation complete. Codex backend substantially implemented. Next: real CI, versioning workflow, Codex integration test coverage.
 
 ## Active Work
 - Nothing in progress
@@ -15,14 +15,14 @@ Core implementation complete. Next: real CI, versioning workflow, role-preset te
 ## Next Actions
 - [ ] Replace placeholder CI with real test execution (Windows runner)
 - [ ] Define release/versioning workflow for `mercenary` CLI distribution
-- [ ] Add automated tests for role-based launch presets (`pipeline`, `coordinator`, `allmind`)
-- [ ] Implement Codex backend (`--backend codex`) per `docs/plans/2026-02-27-codex-backend.md`
+- [ ] Add integration tests for Codex backend (MCP disable, sandbox defaults, native exe)
+- [ ] Finish remaining Codex backend surface per `docs/plans/2026-02-27-codex-backend.md`
 
 ## Quick Reference
 - Run: `node mercenary.js --prompt "test" --timeout 10`
 - Test: `node test/mercenary.test.js`
+- Codex run: `node mercenary.js --prompt "test" --backend codex --timeout 10`
 - Interactive: `node mercenary.js --interactive`
-- Headless: `openHeadlessSession(opts)` — persistent headless Claude via pipe
 - Entry point: `mercenary.js`
 
 ## Out of Scope (for now)
@@ -30,7 +30,7 @@ Core implementation complete. Next: real CI, versioning workflow, role-preset te
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-03-06
-Commits covered through: 1161a3a8d98397f7766adb1089498e9511332dd7
+Last memory update: 2026-03-08
+Commits covered through: ca0046472ed09751e35b564cbad5462366ba605e
 
-<!-- chinvex:last-commit:1161a3a8d98397f7766adb1089498e9511332dd7 -->
+<!-- chinvex:last-commit:ca0046472ed09751e35b564cbad5462366ba605e -->

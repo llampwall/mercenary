@@ -4,14 +4,26 @@
 # Decisions
 
 ## Recent (last 30 days)
-- Stdin piping fallback when CLI args exceed 20K chars — avoids Windows 32K command line limit during Core dispatch with large context injections
+- Codex backend now resolves native `.exe` on Windows instead of `.cmd` shim via `resolveCodexNativeExecutable()`
+- Codex role presets tightened: pipeline→workspace-write+MCP disabled; allmind/coordinator→MCP disabled by default
+- `shouldDisableCodexMcp()` and `getDefaultCodexSandbox()` added for per-run Codex MCP and sandbox policy
+- Stdin piping fallback when CLI args exceed 20K chars — avoids Windows 32K command line limit
 - Added `openHeadlessSession()` for persistent headless Claude sessions via stdin/stdout pipe (no terminal window)
 - Added `--resume <id>` support in `run()` for session continuity across calls; strips `--no-session-persistence` when resuming
-- Reverted `--system-prompt` addition from `buildArgs()`; `--append-system-prompt` (appendSystemPrompt) is the correct persona injection mechanism
-- Bootstrapped `docs/memory/` tracking system and chinvex SessionStart hook via `.claude/settings.json`
-- Added Codex backend plan (`docs/plans/2026-02-27-codex-backend.md`) for routing calls through `codex exec`
 
 ## 2026-03
+
+### 2026-03-08 — Codex role presets tightened; MCP and sandbox defaults added
+
+- **Why:** Codex role presets claimed backend parity with Claude but applied incorrect defaults — pipeline needed sandbox isolation, allmind/coordinator needed MCP disabled to prevent popup storms.
+- **Impact:** `shouldDisableCodexMcp(opts, mode)` and `getDefaultCodexSandbox(opts, mode)` now encode role-based defaults. Pipeline/streaming one-shot default to `workspace-write` sandbox + MCP disabled. Coordinator/allmind interactive default to MCP disabled. Explicit `opts.disableMcp`/`opts.sandbox` override all defaults.
+- **Evidence:** 3dbda30
+
+### 2026-03-07 — Codex backend resolves native .exe not .cmd shim on Windows
+
+- **Why:** Spawning the `.cmd` shim for Codex on Windows causes extra shell processes, slower startup, and edge cases with stdin/stdout piping in `shell: false` mode. The native `.exe` is bundled in the Codex npm package.
+- **Impact:** `resolveCodexNativeExecutable()` added. `resolveCodexPath()` first resolves to `codex.cmd`/shim via `resolveBinary()`, then attempts to find the vendored `.exe` alongside it. Falls back to shim if `.exe` not found. `collectCodexMcpServerNames()` added to parse Codex TOML configs for MCP server names.
+- **Evidence:** 12a7fbd
 
 ### 2026-03-05 — Added openHeadlessSession() for persistent headless Claude sessions
 

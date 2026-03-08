@@ -26,6 +26,10 @@
 - Multiline content edits must use direct file edits — no ad-hoc Python/regex replacement scripts
 - When `--resume <id>` is used, `--no-session-persistence` must NOT be passed (resume requires session persistence) (updated 2026-03-05)
 - Use `appendSystemPrompt`/`--append-system-prompt` for persona injection; only use `--system-prompt` when the full default system prompt must be replaced (updated 2026-03-05)
+- Codex one-shot defaults: `--dangerously-bypass-approvals-and-sandbox --ephemeral` unless `sandbox` is explicitly provided (added 2026-03-08)
+- On Windows, `resolveCodexPath()` attempts to resolve the native `.exe` via `resolveCodexNativeExecutable()` before falling back to the `.cmd` shim — never spawn the `.cmd` shim when `.exe` is available (added 2026-03-07)
+- `shouldDisableCodexMcp(opts, mode)` controls per-run MCP disable for Codex: pipeline/streaming/allmind one-shot default to disabled; coordinator/allmind interactive default to disabled; explicit `opts.disableMcp` overrides all (added 2026-03-07)
+- `getDefaultCodexSandbox(opts, mode)` sets sandbox default: pipeline/streaming one-shot → `workspace-write`; coordinator interactive → `workspace-write`; others → none (added 2026-03-07)
 
 ## Key Facts
 - CLI entry: `node mercenary.js --prompt "..." --timeout N`
@@ -33,7 +37,8 @@
 - Test command: `node test/mercenary.test.js`
 - Integration tests gated behind env var: `MERCENARY_INTEGRATION=1`
 - AllMind persona path: `P:\software\allmind\data\persona\allmind-voice.md` (used by `--am` / `role:'allmind'`)
-- Role presets: `pipeline` → `--output-format stream-json --verbose` + `--strict-mcp-config`; `coordinator` → `--allowed-tools Bash,Read,Edit,Write,Glob,Grep` + `strictMcp:true` in openSession; `allmind` → `--output-format text` + persona (updated 2026-02-26)
+- Claude role presets: `pipeline` → `--output-format stream-json --verbose` + `--strict-mcp-config`; `coordinator` → `--allowed-tools Bash,Read,Edit,Write,Glob,Grep` + `strictMcp:true` in openSession; `allmind` → `--output-format text` + persona (updated 2026-02-26)
+- Codex role presets: `pipeline` → `workspace-write` sandbox + MCP disabled; `allmind` one-shot → MCP disabled; `coordinator`/`allmind` interactive → MCP disabled; explicit `opts.disableMcp` or `opts.sandbox` overrides (added 2026-03-08)
 - SHELL is forced to `pwsh` (the App Execution Alias); bash.exe assignment was incorrect, caused by a broken Claude Code update (updated 2026-02-26)
 - `.claude/settings.json` runs a chinvex SessionStart hook that delivers a session brief; `ACTION REQUIRED` in brief means memory files need updating via `/update-memory`
 - Codex backend plan: `docs/plans/2026-02-27-codex-backend.md` — routes subprocess calls through `codex exec` instead of `claude` when `opts.backend='codex'`
