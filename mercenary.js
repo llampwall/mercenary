@@ -137,7 +137,7 @@ function shouldDisableCodexMcp(opts = {}, mode = 'oneshot') {
     return opts.role === 'coordinator' || opts.role === 'allmind';
   }
 
-  return Boolean(opts.role === 'pipeline' || opts.streaming || opts.role === 'allmind');
+  return Boolean(opts.role === 'pipeline' || opts.role === 'repo-agent' || opts.streaming || opts.role === 'allmind');
 }
 
 function getDefaultCodexSandbox(opts = {}, mode = 'oneshot') {
@@ -147,7 +147,7 @@ function getDefaultCodexSandbox(opts = {}, mode = 'oneshot') {
     return opts.role === 'coordinator' ? 'workspace-write' : undefined;
   }
 
-  if (opts.role === 'pipeline' || opts.streaming) {
+  if (opts.role === 'pipeline' || opts.role === 'repo-agent' || opts.streaming) {
     return 'workspace-write';
   }
 
@@ -442,7 +442,7 @@ function buildArgs(opts) {
   //                     + --strict-mcp-config to block project-level .mcp.json (global mcpServers is empty)
   // role: 'allmind'  → AllMind-voiced session, plain text output + persona injection
   // streaming: true  → legacy alias for pipeline
-  if (opts.role === 'pipeline' || opts.streaming) {
+  if (opts.role === 'pipeline' || opts.role === 'repo-agent' || opts.streaming) {
     args.push('--output-format', 'stream-json', '--verbose');
     args.push('--strict-mcp-config');
     // --strict-mcp-config blocks project-level .mcp.json from loading.
@@ -497,7 +497,7 @@ function buildCodexArgs(opts, warn = (msg) => process.stderr.write(`mercenary: $
 
   if (opts.model) args.push('--model', opts.model);
 
-  if (opts.role === 'pipeline' || opts.streaming) {
+  if (opts.role === 'pipeline' || opts.role === 'repo-agent' || opts.streaming) {
     args.push('--json');
   }
 
