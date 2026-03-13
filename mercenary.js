@@ -9,7 +9,7 @@ import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-const ALLMIND_PERSONA_PATH = 'P:\\software\\allmind\\data\\persona\\allmind-voice.md';
+const ALLMIND_PERSONA_PATH = 'P:\\software\\allmind\\config\\persona\\allmind-voice.md';
 const KNOWN_CLAUDE_PATH = 'C:\\Users\\Jordan\\.local\\bin\\claude.exe';
 const GRACE_PERIOD_MS = 5000;
 const SAFE_CLI_CHARS = 20000;
