@@ -4,6 +4,7 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Added `--session-id <uuid>` flag to CLI and `run()`; same session-persistence semantics as `--resume`; fixed `--resume` CLI passthrough via `valueFlags`
 - Added `repo-agent` role as a pipeline alias (stream-json, `--strict-mcp-config`, MCP disabled, `workspace-write` sandbox)
 - Codex backend now resolves native `.exe` on Windows instead of `.cmd` shim via `resolveCodexNativeExecutable()`
 - Codex role presets tightened: pipeline→workspace-write+MCP disabled; allmind/coordinator→MCP disabled by default
@@ -13,6 +14,12 @@
 - Added `--resume <id>` support in `run()` for session continuity across calls; strips `--no-session-persistence` when resuming
 
 ## 2026-03
+
+### 2026-03-12 — Added --session-id flag and fixed --resume CLI passthrough
+
+- **Why:** `--resume` was programmatic-only (not in `valueFlags`); callers also needed a way to attach to a named session by UUID (`--session-id`) without resume semantics. Both share the same pattern: strip `--no-session-persistence`, pass the flag to claude CLI.
+- **Impact:** `--session-id <uuid>` added to `buildArgs()` and `main()`. Both `--resume` and `--session-id` added to `parseArgs` `valueFlags` so they work correctly from the CLI. `sessionId` threaded through `main()` → `run()`.
+- **Evidence:** 6d5b1b7
 
 ### 2026-03-11 — Added repo-agent role as pipeline alias
 

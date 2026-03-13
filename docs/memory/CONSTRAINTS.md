@@ -25,6 +25,7 @@
 - LF line endings everywhere; only `.bat` and `.cmd` may use CRLF (enforced by `.editorconfig` and `.gitattributes`)
 - Multiline content edits must use direct file edits — no ad-hoc Python/regex replacement scripts
 - When `--resume <id>` is used, `--no-session-persistence` must NOT be passed (resume requires session persistence) (updated 2026-03-05)
+- `--session-id <uuid>` strips `--no-session-persistence` and passes `--session-id <uuid>` to claude CLI; same session-persistence pattern as `--resume` (added 2026-03-12)
 - Use `appendSystemPrompt`/`--append-system-prompt` for persona injection; only use `--system-prompt` when the full default system prompt must be replaced (updated 2026-03-05)
 - Codex one-shot defaults: `--dangerously-bypass-approvals-and-sandbox --ephemeral` unless `sandbox` is explicitly provided (added 2026-03-08)
 - On Windows, `resolveCodexPath()` attempts to resolve the native `.exe` via `resolveCodexNativeExecutable()` before falling back to the `.cmd` shim — never spawn the `.cmd` shim when `.exe` is available (added 2026-03-07)
@@ -45,6 +46,7 @@
 - Codex backend plan: `docs/plans/2026-02-27-codex-backend.md` — routes subprocess calls through `codex exec` instead of `claude` when `opts.backend='codex'`
 - `openHeadlessSession(opts)` — persistent headless Claude session via stdin/stdout pipe; does not open a terminal window (updated 2026-03-05)
 - `--resume <id>` option in `run()` — enables session continuity; strips `--no-session-persistence` and passes `--resume <id>` to claude CLI (updated 2026-03-05)
+- `--session-id <uuid>` option in `run()` / CLI — attaches to a named session; strips `--no-session-persistence` and passes `--session-id <uuid>` to claude CLI (added 2026-03-12)
 
 ## Hazards
 - `--interactive` silently fails if `wt` or `pwsh` are not installed/discoverable on PATH
