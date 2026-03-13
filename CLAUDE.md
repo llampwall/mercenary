@@ -31,7 +31,7 @@ JavaScript (Node.js 22, ESM)
 - Child env sanitization MUST remove `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, and `ANTHROPIC_API_KEY`.
 - Child `SHELL` MUST be forced to pwsh path for Windows automation consistency.
 - Every spawned process MUST be tracked in `.process-ledger.json` (`--ps`, `--audit`, `--purge` workflows depend on this).
-- `--am` reads persona from `P:\software\allmind\data\persona\allmind-voice.md`.
+- `--am` reads persona from `P:\software\allmind\config\persona\allmind-voice.md`.
 - When opening this repo, check if session brief shows `ACTION REQUIRED` -- if so, offer to run `/update-memory`.
 
 ## Commands

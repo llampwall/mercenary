@@ -105,7 +105,7 @@ Always applied to child process env:
 ### Persona System
 
 - `--persona <path>` reads the file at `<path>`, wraps content in `<persona>...</persona>` XML tags, passes via `--append-system-prompt`
-- `--am` is sugar for `--persona P:\software\allmind\data\persona\allmind-voice.md`
+- `--am` is sugar for `--persona P:\software\allmind\config\persona\allmind-voice.md`
 - If both `--persona` and `--append-system-prompt` are provided, persona comes first (concatenated)
 - File read is synchronous and uncached (mercenary is short-lived per CLI invocation; AllMind module consumers can cache at their layer)
 
@@ -234,7 +234,7 @@ Over time, AgentSpawner, chat-spawner, telegram-chat, and pipeline-coordinator a
 
 ### Flow 7: Persona injection (CLI)
 1. User runs `mercenary --prompt "Status report" --am --timeout 30`
-2. Mercenary reads `P:\software\allmind\data\persona\allmind-voice.md`
+2. Mercenary reads `P:\software\allmind\config\persona\allmind-voice.md`
 3. Wraps content in `<persona>...</persona>` tags
 4. Passes via `--append-system-prompt` to claude
 5. Rest identical to Flow 1
@@ -280,7 +280,7 @@ Over time, AgentSpawner, chat-spawner, telegram-chat, and pipeline-coordinator a
 - Assumes `claude` is installed at `C:\Users\Jordan\.local\bin\claude.exe` (overridable via `CLAUDE_PATH`)
 - Assumes Windows Terminal (`wt`) is installed (for interactive mode)
 - `--dangerously-skip-permissions` always set -- all launches are trusted/automated
-- ALLMIND persona path hardcoded: `P:\software\allmind\data\persona\allmind-voice.md`
+- ALLMIND persona path hardcoded: `P:\software\allmind\config\persona\allmind-voice.md`
 - AllMind API integration (routes) is AllMind-side work, not part of mercenary v1
 - Node.js 22+ required (uses ESM, modern APIs)
 

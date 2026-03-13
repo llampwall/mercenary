@@ -38,7 +38,7 @@
 - Interactive entry: `node mercenary.js --interactive`
 - Test command: `node test/mercenary.test.js`
 - Integration tests gated behind env var: `MERCENARY_INTEGRATION=1`
-- AllMind persona path: `P:\software\allmind\data\persona\allmind-voice.md` (used by `--am` / `role:'allmind'`)
+- AllMind persona path: `P:\software\allmind\config\persona\allmind-voice.md` (used by `--am` / `role:'allmind'`)
 - Claude role presets: `pipeline` → `--output-format stream-json --verbose` + `--strict-mcp-config`; `coordinator` → `--allowed-tools Bash,Read,Edit,Write,Glob,Grep` + `strictMcp:true` in openSession; `allmind` → `--output-format text` + persona (updated 2026-02-26)
 - Codex role presets: `pipeline` → `workspace-write` sandbox + MCP disabled; `allmind` one-shot → MCP disabled; `coordinator`/`allmind` interactive → MCP disabled; explicit `opts.disableMcp` or `opts.sandbox` overrides (added 2026-03-08)
 - SHELL is forced to `pwsh` (the App Execution Alias); bash.exe assignment was incorrect, caused by a broken Claude Code update (updated 2026-02-26)

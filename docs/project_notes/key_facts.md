@@ -39,7 +39,7 @@
 - Behavior spec: `docs/specs/mercenary.md`
 - Canonical notes: `docs/project_notes/`
 - Process ledger file: `.process-ledger.json`
-- AllMind persona file for `--am`: `P:\software\allmind\data\persona\allmind-voice.md`
+- AllMind persona file for `--am`: `P:\software\allmind\config\persona\allmind-voice.md`
 - Known Claude fallback path: `C:\Users\Jordan\.local\bin\claude.exe`
 - Interactive temp workspaces: `%TEMP%\mercenary-*`
 
