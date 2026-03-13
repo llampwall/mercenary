@@ -428,11 +428,12 @@ function loadPersona(personaPath) {
 function buildArgs(opts) {
   const args = ['--dangerously-skip-permissions', '--no-session-persistence'];
 
-  // Resume a previous session -- requires session persistence, so remove the no-persistence flag
-  if (opts.resume) {
+  // Resume or session-id -- both require session persistence, so remove the no-persistence flag
+  if (opts.resume || opts.sessionId) {
     const idx = args.indexOf('--no-session-persistence');
     if (idx !== -1) args.splice(idx, 1);
-    args.push('--resume', opts.resume);
+    if (opts.resume) args.push('--resume', opts.resume);
+    if (opts.sessionId) args.push('--session-id', opts.sessionId);
   }
 
   if (opts.allowedTools) args.push('--allowed-tools', opts.allowedTools);
@@ -1102,7 +1103,7 @@ function parseArgs(argv) {
     '--prompt', '--timeout', '--allowed-tools', '--max-tokens',
     '--persona', '--model', '--output-format', '--append-system-prompt',
     '--max-turns', '--cwd', '--system-prompt', '--title', '--kill',
-    '--backend'
+    '--backend', '--session-id', '--resume'
   ]);
 
   let i = 0;
@@ -1194,6 +1195,8 @@ async function main() {
       maxTurns: opts.maxTurns ? Number(opts.maxTurns) : undefined,
       cwd: opts.cwd,
       backend: opts.backend,
+      resume: opts.resume,
+      sessionId: opts.sessionId,
     });
 
     if (opts.json) {

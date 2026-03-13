@@ -4,6 +4,7 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Added `repo-agent` role as a pipeline alias (stream-json, `--strict-mcp-config`, MCP disabled, `workspace-write` sandbox)
 - Codex backend now resolves native `.exe` on Windows instead of `.cmd` shim via `resolveCodexNativeExecutable()`
 - Codex role presets tightened: pipeline→workspace-write+MCP disabled; allmind/coordinator→MCP disabled by default
 - `shouldDisableCodexMcp()` and `getDefaultCodexSandbox()` added for per-run Codex MCP and sandbox policy
@@ -12,6 +13,12 @@
 - Added `--resume <id>` support in `run()` for session continuity across calls; strips `--no-session-persistence` when resuming
 
 ## 2026-03
+
+### 2026-03-11 — Added repo-agent role as pipeline alias
+
+- **Why:** ALLMIND dispatch needed a named role for repo-scoped agent runs that shares pipeline semantics (streaming output, MCP isolation, workspace sandbox) without callers having to specify `role: 'pipeline'`.
+- **Impact:** `repo-agent` role maps to identical behavior as `pipeline`: stream-json output, `--strict-mcp-config`, MCP disabled by default, `workspace-write` Codex sandbox. Two lines changed in `mercenary.js` role preset table.
+- **Evidence:** 74e1cee
 
 ### 2026-03-08 — Codex role presets tightened; MCP and sandbox defaults added
 
