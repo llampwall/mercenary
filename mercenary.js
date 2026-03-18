@@ -750,6 +750,8 @@ async function openSession(opts = {}) {
     '$env:ANTHROPIC_API_KEY = $null',
     '$env:SHELL = "C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe"',
     `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "${opts.maxTokens || 65536}"`,
+    // Expose dispatch_id so the spawned session can include it in events
+    ...(opts.dispatchId ? [`$env:ALLMIND_DISPATCH_ID = "${opts.dispatchId.replace(/"/g, '')}"`] : []),
   ];
 
   // Set working directory before launching claude
@@ -832,6 +834,21 @@ async function openSession(opts = {}) {
   lines.push('Write-Host "[mercenary] Launching claude..." -ForegroundColor DarkGray');
   lines.push(claudeArgs.join(' `\n  '));
   lines.push('Write-Host "[mercenary] Claude exited with code $LASTEXITCODE" -ForegroundColor DarkGray');
+
+  // Exit hook — phone home to AllMind with exit code so dead sessions are detected.
+  // The dispatch_id is baked in at generation time; if not provided, skip the hook.
+  if (opts.dispatchId) {
+    const safeDispatchId = opts.dispatchId.replace(/"/g, '');
+    lines.push('');
+    lines.push('# Exit hook — report session exit to AllMind');
+    lines.push('try {');
+    lines.push(`  $exitBody = '{"event_type":"mercenary_session_exit","summary":"Session exited with code ' + $LASTEXITCODE + '","details":{"dispatch_id":"${safeDispatchId}","exit_code":' + $LASTEXITCODE + '}}'`);
+    lines.push('  curl.exe -s -X POST http://localhost:7780/api/internal/event -H "Content-Type: application/json" -d $exitBody | Out-Null');
+    lines.push('  Write-Host "[mercenary] Exit hook sent (code $LASTEXITCODE)" -ForegroundColor DarkGray');
+    lines.push('} catch {');
+    lines.push('  Write-Host "[mercenary] Exit hook failed: $_" -ForegroundColor DarkGray');
+    lines.push('}');
+  }
 
   const launcherPath = join(tmpBase, 'launcher.ps1');
   writeFileSync(launcherPath, lines.join('\n'), 'utf8');
