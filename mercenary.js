@@ -541,9 +541,16 @@ function buildCodexArgs(opts, warn = (msg) => process.stderr.write(`mercenary: $
   return args;
 }
 
+function warnMissingProvenance(opts, label) {
+  const warn = (msg) => process.stderr.write(`mercenary: ${msg}\n`);
+  if (!opts.purpose) warn(`${label}: no --purpose provided — consider setting purpose for traceability`);
+  if (!opts.origin) warn(`${label}: no --origin provided — consider setting origin for traceability`);
+}
+
 // --- One-shot Mode ---
 
 function run(opts = {}) {
+  warnMissingProvenance(opts, 'run');
   return new Promise((resolve, reject) => {
     if (!opts.prompt) return reject(new Error('prompt is required'));
 
@@ -728,6 +735,7 @@ async function openSessionCodex(opts, title, tmpBase) {
 }
 
 async function openSession(opts = {}) {
+  warnMissingProvenance(opts, 'openSession');
   const backend = opts.backend || 'claude';
   const title = opts.title || 'Mercenary';
   const tmpBase = mkdtempSync(join(tmpdir(), 'mercenary-'));
@@ -899,6 +907,7 @@ async function openSession(opts = {}) {
  * @returns {Promise<{send: Function, close: Function, pid: number, closed: boolean, turnCount: number}>}
  */
 async function openHeadlessSession(opts = {}) {
+  warnMissingProvenance(opts, 'openHeadlessSession');
   const claudePath = resolveClaudePath();
   const env = sanitizeEnv(opts);
 
