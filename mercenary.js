@@ -69,7 +69,7 @@ function resolveBinary({ envVar, knownPaths = [], whereName, notFoundMsg }) {
   if (process.env[envVar]) {
     const resolvedEnvPath = resolveExecutableCandidate(process.env[envVar]);
     if (resolvedEnvPath) return resolvedEnvPath;
-    throw new Error(`${envVar} set to "${process.env[envVar]}" but file not found.`);
+    throw new Error(`${envVar} set to "${process.env[envVar]}" but file not found. This is a system configuration issue — check that the path is correct in the PM2 ecosystem config (config/ecosystem.config.cjs) or data/.env.`);
   }
   for (const p of knownPaths) {
     const resolvedKnownPath = resolveExecutableCandidate(p);
@@ -91,7 +91,7 @@ function resolveClaudePath() {
     envVar: 'CLAUDE_PATH',
     knownPaths: [KNOWN_CLAUDE_PATH],
     whereName: 'claude',
-    notFoundMsg: 'claude binary not found. Set CLAUDE_PATH or ensure claude is installed.',
+    notFoundMsg: 'Claude CLI binary not found — this is a system configuration issue that requires operator intervention. Checked: CLAUDE_PATH env var, known path (C:\\Users\\Jordan\\.local\\bin\\claude.exe), and PATH lookup via where.exe. The operator needs to install Claude Code or set CLAUDE_PATH in the PM2 ecosystem config.',
   });
 }
 
@@ -99,7 +99,7 @@ function resolveCodexPath() {
   const resolved = resolveBinary({
     envVar: 'CODEX_PATH',
     whereName: 'codex',
-    notFoundMsg: 'codex binary not found. Set CODEX_PATH or run: npm install -g @openai/codex',
+    notFoundMsg: 'Codex CLI binary not found — this is a system configuration issue that requires operator intervention. Checked: CODEX_PATH env var and PATH lookup via where.exe. The operator needs to install Codex (npm install -g @openai/codex) or set CODEX_PATH in the PM2 ecosystem config.',
   });
   return resolveCodexNativeExecutable(resolved) || resolved;
 }
@@ -253,6 +253,8 @@ function ledgerRegister(info, path = LEDGER_PATH) {
     binaryPath: info.binaryPath || null,
     spawnedAt: now,
     spawnedBy: process.pid,
+    purpose: info.purpose ? String(info.purpose).slice(0, 200) : null,
+    origin: info.origin ? String(info.origin).slice(0, 200) : null,
     prompt: info.prompt ? String(info.prompt).slice(0, 200) : null,
     cwd: info.cwd || process.cwd(),
     status: 'alive',
@@ -312,6 +314,8 @@ function ledgerAudit(path = LEDGER_PATH) {
         binaryPath: null,
         spawnedAt: null,
         spawnedBy: null,
+        purpose: null,
+        origin: null,
         prompt: null,
         cwd: null,
         status: 'orphan',
@@ -336,15 +340,17 @@ function ledgerStatus(path = LEDGER_PATH) {
   if (!entries.length) return 'No tracked processes.';
 
   const lines = [
-    `${'PID'.padEnd(8)} ${'STATUS'.padEnd(10)} ${'MODE'.padEnd(12)} ${'BACKEND'.padEnd(8)} ${'MEM(KB)'.padEnd(10)} ${'SPAWNED'.padEnd(26)} ORPHAN`,
-    '-'.repeat(80),
+    `${'PID'.padEnd(8)} ${'STATUS'.padEnd(10)} ${'MODE'.padEnd(12)} ${'BACKEND'.padEnd(8)} ${'MEM(KB)'.padEnd(10)} ${'SPAWNED'.padEnd(26)} ${'ORIGIN'.padEnd(20)} ${'PURPOSE'.padEnd(30)} ORPHAN`,
+    '-'.repeat(130),
   ];
   for (const e of entries.sort((a, b) => a.pid - b.pid)) {
     const mem = e.memoryKB != null ? String(e.memoryKB) : '-';
     const spawned = e.spawnedAt ? e.spawnedAt.replace('T', ' ').slice(0, 23) : '-';
+    const origin = (e.origin || '-').slice(0, 18);
+    const purpose = (e.purpose || '-').slice(0, 28);
     const orphan = e.discoveredOrphan ? 'yes' : 'no';
     lines.push(
-      `${String(e.pid).padEnd(8)} ${e.status.padEnd(10)} ${e.mode.padEnd(12)} ${e.backend.padEnd(8)} ${mem.padEnd(10)} ${spawned.padEnd(26)} ${orphan}`
+      `${String(e.pid).padEnd(8)} ${e.status.padEnd(10)} ${e.mode.padEnd(12)} ${e.backend.padEnd(8)} ${mem.padEnd(10)} ${spawned.padEnd(26)} ${origin.padEnd(20)} ${purpose.padEnd(30)} ${orphan}`
     );
   }
   return lines.join('\n');
@@ -588,7 +594,7 @@ function run(opts = {}) {
     }
 
     try {
-      ledgerRegister({ pid: proc.pid, backend, mode: 'oneshot', binaryPath, prompt: opts.prompt, cwd: opts.cwd || process.cwd() });
+      ledgerRegister({ pid: proc.pid, backend, mode: 'oneshot', binaryPath, prompt: opts.prompt, cwd: opts.cwd || process.cwd(), purpose: opts.purpose, origin: opts.origin });
     } catch { /* ledger failure must not break spawning */ }
 
     // Notify caller of PID synchronously (still inside Promise executor)
@@ -633,7 +639,7 @@ function run(opts = {}) {
     proc.on('error', (err) => {
       if (timer) clearTimeout(timer);
       try { ledgerMarkDead(proc.pid); } catch { /* ledger failure */ }
-      reject(err);
+      reject(new Error(`Failed to spawn ${backend} process at ${binaryPath}: ${err.message}. Common causes: binary not found (ENOENT), permission denied (EACCES), or missing system DLL. Check that the CLI binary exists and is executable.`));
     });
   });
 }
@@ -715,7 +721,7 @@ async function openSessionCodex(opts, title, tmpBase) {
   });
   proc.unref();
   try {
-    ledgerRegister({ pid: proc.pid, backend: 'codex', mode: 'interactive', binaryPath: codexPath, cwd: opts.cwd });
+    ledgerRegister({ pid: proc.pid, backend: 'codex', mode: 'interactive', binaryPath: codexPath, cwd: opts.cwd, purpose: opts.purpose, origin: opts.origin });
   } catch { /* ledger failure must not break spawning */ }
 
   return { pid: proc.pid, title, launcherPath };
@@ -866,7 +872,7 @@ async function openSession(opts = {}) {
   });
   proc.unref();
   try {
-    ledgerRegister({ pid: proc.pid, backend: 'claude', mode: 'interactive', binaryPath: claudePath, cwd: opts.cwd });
+    ledgerRegister({ pid: proc.pid, backend: 'claude', mode: 'interactive', binaryPath: claudePath, cwd: opts.cwd, purpose: opts.purpose, origin: opts.origin });
   } catch { /* ledger failure must not break spawning */ }
 
   return { pid: proc.pid, title, launcherPath };
@@ -946,6 +952,8 @@ async function openHeadlessSession(opts = {}) {
       binaryPath: claudePath,
       prompt: '[headless session]',
       cwd: opts.cwd || process.cwd(),
+      purpose: opts.purpose,
+      origin: opts.origin,
     });
   } catch { /* ledger failure must not break spawning */ }
 
@@ -1020,7 +1028,7 @@ async function openHeadlessSession(opts = {}) {
       const reject = currentReject;
       currentResolve = null;
       currentReject = null;
-      reject(new Error(`Headless session process exited with code ${exitCode}`));
+      reject(new Error(`Headless session process exited unexpectedly (exit code ${exitCode}). The session was active but the Claude CLI process died mid-turn. Exit code 1 = general error, 124 = timeout, 137 = killed (OOM or external signal). Check pm2 logs for allmind or the agent's log file in data/logs/agents/.`));
     }
   });
 
@@ -1038,7 +1046,7 @@ async function openHeadlessSession(opts = {}) {
   // Wait for initial system message (session ready)
   await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
-      reject(new Error('Headless session startup timed out (30s)'));
+      reject(new Error('Headless session startup timed out (30s). The Claude CLI process was spawned but never produced a system init message. Common causes: ANTHROPIC_API_KEY expired or missing (check data/.env), slow MCP server initialization, or Claude CLI hanging on auth. Check pm2 logs for allmind.'));
     }, 30000);
 
     const onData = (chunk) => {
@@ -1052,9 +1060,9 @@ async function openHeadlessSession(opts = {}) {
     };
     proc.stdout.on('data', onData);
 
-    proc.on('close', () => {
+    proc.on('close', (code) => {
       clearTimeout(timeout);
-      reject(new Error('Headless session process exited before ready'));
+      reject(new Error(`Headless session process exited before ready (exit code ${code}). The Claude CLI started but died before producing a system message. Common causes: ANTHROPIC_API_KEY expired or missing (check data/.env), Claude CLI auth failure (run 'claude auth status'), or MCP server config error blocking startup. Check pm2 logs for allmind.`));
     });
   });
 
@@ -1120,7 +1128,7 @@ function parseArgs(argv) {
     '--prompt', '--timeout', '--allowed-tools', '--max-tokens',
     '--persona', '--model', '--output-format', '--append-system-prompt',
     '--max-turns', '--cwd', '--system-prompt', '--title', '--kill',
-    '--backend', '--session-id', '--resume'
+    '--backend', '--session-id', '--resume', '--purpose', '--origin'
   ]);
 
   let i = 0;
@@ -1192,6 +1200,8 @@ async function main() {
       maxTokens: opts.maxTokens ? Number(opts.maxTokens) : undefined,
       appendSystemPrompt: opts.appendSystemPrompt,
       backend: opts.backend,
+      purpose: opts.purpose,
+      origin: opts.origin,
     });
 
     console.log(result.pid);
@@ -1214,6 +1224,8 @@ async function main() {
       backend: opts.backend,
       resume: opts.resume,
       sessionId: opts.sessionId,
+      purpose: opts.purpose,
+      origin: opts.origin,
     });
 
     if (opts.json) {
