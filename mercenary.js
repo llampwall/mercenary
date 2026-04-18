@@ -479,7 +479,19 @@ function buildArgs(opts) {
     appendSystemPrompt += opts.appendSystemPrompt;
   }
   if (appendSystemPrompt) {
-    args.push('--append-system-prompt', appendSystemPrompt);
+    // If the content is large, write to a temp file to avoid ENAMETOOLONG on Windows.
+    // Claude CLI supports --append-system-prompt-file natively.
+    if (appendSystemPrompt.length > 8000) {
+      const tmpDir = opts._tempDir || mkdtempSync(join(tmpdir(), 'mercenary-'));
+      const promptFile = join(tmpDir, 'append-system-prompt.txt');
+      writeFileSync(promptFile, appendSystemPrompt, 'utf8');
+      args.push('--append-system-prompt-file', promptFile);
+      // Stash path so caller can clean up
+      args._appendPromptTempFile = promptFile;
+      args._appendPromptTempDir = tmpDir;
+    } else {
+      args.push('--append-system-prompt', appendSystemPrompt);
+    }
   }
 
   return args;
@@ -934,7 +946,14 @@ async function openHeadlessSession(opts = {}) {
     appendSystemPrompt += opts.appendSystemPrompt;
   }
   if (appendSystemPrompt) {
-    args.push('--append-system-prompt', appendSystemPrompt);
+    if (appendSystemPrompt.length > 8000) {
+      const tmpDir = mkdtempSync(join(tmpdir(), 'mercenary-headless-'));
+      const promptFile = join(tmpDir, 'append-system-prompt.txt');
+      writeFileSync(promptFile, appendSystemPrompt, 'utf8');
+      args.push('--append-system-prompt-file', promptFile);
+    } else {
+      args.push('--append-system-prompt', appendSystemPrompt);
+    }
   }
 
   // MCP config — headless Core sessions use strict MCP to block project .mcp.json
@@ -951,6 +970,12 @@ async function openHeadlessSession(opts = {}) {
     windowsHide: true,
     stdio: ['pipe', 'pipe', 'pipe'],
     env,
+  });
+
+  // Debug: log stderr from headless session
+  proc.stderr.on('data', (chunk) => {
+    const text = chunk.toString().trim();
+    if (text) console.error(`[headless-session pid=${proc.pid}] stderr: ${text.substring(0, 500)}`);
   });
 
   try {
@@ -1052,22 +1077,34 @@ async function openHeadlessSession(opts = {}) {
     }
   });
 
-  // Wait for initial system message (session ready)
-  await new Promise((resolve, reject) => {
+  // Claude Code 2.1.88+ treats stream-json + pipe stdin as print mode:
+  // expects stdin data within 3s or errors with "Input must be provided".
+  // Write the initial prompt to stdin immediately so Claude gets input in time.
+  // If no initialPrompt, write a minimal message to satisfy the stdin check.
+  const firstMessage = opts.initialPrompt || 'ready';
+  proc.stdin.write(firstMessage + '\n');
+
+  // Wait for initial system message AND first turn response
+  const initResponse = await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error('Headless session startup timed out (30s). The Claude CLI process was spawned but never produced a system init message. Common causes: ANTHROPIC_API_KEY expired or missing (check data/.env), slow MCP server initialization, or Claude CLI hanging on auth. Check pm2 logs for allmind.'));
     }, 30000);
 
-    const onData = (chunk) => {
-      const text = chunk.toString();
-      // Look for system init message in stream-json output
-      if (text.includes('"type":"system"') || text.includes('"type": "system"')) {
-        clearTimeout(timeout);
-        proc.stdout.removeListener('data', onData);
-        resolve();
-      }
+    // We need to wait for the first result (response to initialPrompt).
+    // The _handleStreamEvent function resolves currentResolve on 'result' type.
+
+    // Set up to resolve when the first turn completes
+    currentResolve = (parsed) => {
+      clearTimeout(timeout);
+      currentResolve = null;
+      currentReject = null;
+      turnCount++;
+      resolve(parsed);
     };
-    proc.stdout.on('data', onData);
+    currentReject = (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    };
 
     proc.on('close', (code) => {
       clearTimeout(timeout);
@@ -1076,6 +1113,9 @@ async function openHeadlessSession(opts = {}) {
   });
 
   return {
+    /** Response from the initial prompt (if provided) */
+    initResponse,
+
     /**
      * Send a message to the headless session and await the response.
      * @param {string} message - The message to send
