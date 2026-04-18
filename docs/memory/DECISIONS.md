@@ -4,16 +4,40 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Added `purpose` and `origin` fields to process ledger; all spawn paths warn to stderr when either is missing — enforces caller traceability
+- Added launcher exit hook: `openSession()` with `dispatchId` now sets `ALLMIND_DISPATCH_ID` env var and POSTs `mercenary_session_exit` to AllMind event API after Claude exits
+- Fixed `--am` persona path: updated `data/persona/` → `config/persona/` after AllMind repo relocation
 - Added `--session-id <uuid>` flag to CLI and `run()`; same session-persistence semantics as `--resume`; fixed `--resume` CLI passthrough via `valueFlags`
 - Added `repo-agent` role as a pipeline alias (stream-json, `--strict-mcp-config`, MCP disabled, `workspace-write` sandbox)
 - Codex backend now resolves native `.exe` on Windows instead of `.cmd` shim via `resolveCodexNativeExecutable()`
-- Codex role presets tightened: pipeline→workspace-write+MCP disabled; allmind/coordinator→MCP disabled by default
 - `shouldDisableCodexMcp()` and `getDefaultCodexSandbox()` added for per-run Codex MCP and sandbox policy
 - Stdin piping fallback when CLI args exceed 20K chars — avoids Windows 32K command line limit
-- Added `openHeadlessSession()` for persistent headless Claude sessions via stdin/stdout pipe (no terminal window)
-- Added `--resume <id>` support in `run()` for session continuity across calls; strips `--no-session-persistence` when resuming
 
 ## 2026-03
+
+### 2026-03-21 — Added purpose and origin tracking to process ledger
+
+- **Why:** Process ledger entries lacked context about what an agent was doing and who spawned it, making `--ps`/`--audit` output opaque for debugging and traceability.
+- **Impact:** `purpose` (task description) and `origin` (spawner identity) added to ledger entries for all spawn modes: one-shot, interactive, headless, and Codex. Both fields display in `--ps`/`--audit` output. 27 lines changed in `mercenary.js`.
+- **Evidence:** 6b79c79
+
+### 2026-03-21 — Warn on spawn when purpose/origin not provided
+
+- **Why:** Callers were omitting `purpose` and `origin` silently; without enforcement the ledger fields would be useless in practice.
+- **Impact:** `run()`, `openSession()`, and `openHeadlessSession()` now log a stderr warning when either field is missing. No behavior change beyond the warning. 9 lines added to `mercenary.js`.
+- **Evidence:** b70db11
+
+### 2026-03-18 — Added launcher exit hook and dispatch_id env var for session tracking
+
+- **Why:** AllMind needs to detect sessions that fail silently — if `mercenary_session_complete` never fires but `mercenary_session_exit` does, the session failed without reporting.
+- **Impact:** When `dispatchId` is provided to `openSession()`, the generated launcher script sets `$env:ALLMIND_DISPATCH_ID` in the child environment and POSTs `mercenary_session_exit` to AllMind's `/api/internal/event` after Claude exits. 17 lines added to `mercenary.js`.
+- **Evidence:** d5a82e6
+
+### 2026-03-13 — Fixed --am persona path after AllMind repo relocation
+
+- **Why:** AllMind repo moved persona file from `data/persona/` to `config/persona/`; `--am` / `role:'allmind'` was reading from the old path and failing silently.
+- **Impact:** One-line path update in `mercenary.js`. No interface change.
+- **Evidence:** b82123c
 
 ### 2026-03-12 — Added --session-id flag and fixed --resume CLI passthrough
 

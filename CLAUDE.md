@@ -109,3 +109,6 @@ Do NOT treat these as meaningful:
 - formatting/lint-only churn
 - merges
 - commit messages prefixed with `docs:` or `notes:`
+
+
+Before searching for files with Glob/Grep, check docs/sys/lookup.json — a concept-to-files index. If your search term matches a key, you already know which files to read.

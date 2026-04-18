@@ -1,0 +1,26 @@
+{
+  ".githooks": [
+    ".githooks/post-commit",
+    ".githooks/post-commit.ps1"
+  ],
+  "commit": [
+    ".githooks/post-commit",
+    ".githooks/post-commit.ps1"
+  ],
+  "mercenary": [
+    "docs/specs/mercenary.md",
+    "mercenary.js",
+    "package.json"
+  ],
+  "post commit": [
+    ".githooks/post-commit",
+    ".githooks/post-commit.ps1"
+  ],
+  "project_notes": [
+    "docs/project_notes/adrs.md",
+    "docs/project_notes/bugs.md",
+    "docs/project_notes/key_facts.md",
+    "docs/project_notes/operating_brief.md",
+    "docs/project_notes/worklog.md"
+  ]
+}

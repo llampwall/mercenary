@@ -32,6 +32,8 @@
 - `shouldDisableCodexMcp(opts, mode)` controls per-run MCP disable for Codex: pipeline/streaming/allmind one-shot default to disabled; coordinator/allmind interactive default to disabled; explicit `opts.disableMcp` overrides all (added 2026-03-07)
 - `getDefaultCodexSandbox(opts, mode)` sets sandbox default: pipeline/streaming one-shot → `workspace-write`; coordinator interactive → `workspace-write`; others → none (added 2026-03-07)
 - `repo-agent` role is a pipeline alias: identical behavior (stream-json, `--strict-mcp-config`, MCP disabled, `workspace-write` sandbox for Codex) (added 2026-03-11)
+- When `dispatchId` is passed to `openSession()`, the launcher sets `$env:ALLMIND_DISPATCH_ID` in the child env and POSTs `mercenary_session_exit` to AllMind `/api/internal/event` after Claude exits (added 2026-03-18)
+- All spawn paths (`run()`, `openSession()`, `openHeadlessSession()`) warn to stderr when `purpose` or `origin` are not provided — callers must supply both for traceability (added 2026-03-21)
 
 ## Key Facts
 - CLI entry: `node mercenary.js --prompt "..." --timeout N`
@@ -45,6 +47,7 @@
 - `.claude/settings.json` runs a chinvex SessionStart hook that delivers a session brief; `ACTION REQUIRED` in brief means memory files need updating via `/update-memory`
 - Codex backend plan: `docs/plans/2026-02-27-codex-backend.md` — routes subprocess calls through `codex exec` instead of `claude` when `opts.backend='codex'`
 - `openHeadlessSession(opts)` — persistent headless Claude session via stdin/stdout pipe; does not open a terminal window (updated 2026-03-05)
+- Process ledger (`.process-ledger.json`) tracks `purpose` (task description) and `origin` (spawner identity) for every spawned process; both fields show in `--ps`/`--audit` output (added 2026-03-21)
 - `--resume <id>` option in `run()` — enables session continuity; strips `--no-session-persistence` and passes `--resume <id>` to claude CLI (updated 2026-03-05)
 - `--session-id <uuid>` option in `run()` / CLI — attaches to a named session; strips `--no-session-persistence` and passes `--session-id <uuid>` to claude CLI (added 2026-03-12)
 
