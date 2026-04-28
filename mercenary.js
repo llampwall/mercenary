@@ -163,6 +163,9 @@ function sanitizeEnv(opts = {}) {
   delete env.ANTHROPIC_API_KEY;
   env.SHELL = 'C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe';
   env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(opts.maxTokens || 65536);
+  if (opts.useLocalModel) {
+    env.ANTHROPIC_BASE_URL = opts.localModelUrl || 'http://127.0.0.1:4000';
+  }
   return env;
 }
 
@@ -778,6 +781,8 @@ async function openSession(opts = {}) {
     `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "${opts.maxTokens || 65536}"`,
     // Expose dispatch_id so the spawned session can include it in events
     ...(opts.dispatchId ? [`$env:ALLMIND_DISPATCH_ID = "${opts.dispatchId.replace(/"/g, '')}"`] : []),
+    // Route through local LiteLLM proxy when caller opts in
+    ...(opts.useLocalModel ? [`$env:ANTHROPIC_BASE_URL = "${(opts.localModelUrl || 'http://127.0.0.1:4000').replace(/"/g, '`"')}"`] : []),
   ];
 
   // Set working directory before launching claude
