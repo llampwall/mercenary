@@ -803,14 +803,17 @@ async function openSession(opts = {}) {
     claudeArgs.push(`--model "${opts.model}"`);
   }
 
-  // System prompt (write to temp file to avoid escaping issues)
+  // System prompt — write to temp file and pass path to claude (--system-prompt-file).
+  // Inlining via PowerShell variable expansion would re-create the Windows CLI length
+  // limit at the CreateProcess() boundary; the file flag avoids that entirely.
+  let systemPromptFile = null;
   if (opts.systemPrompt) {
-    const promptFile = join(tmpBase, 'system-prompt.txt');
-    writeFileSync(promptFile, opts.systemPrompt, 'utf8');
-    claudeArgs.push(`--system-prompt (Get-Content "${promptFile}" -Raw)`);
+    systemPromptFile = join(tmpBase, 'system-prompt.txt');
+    writeFileSync(systemPromptFile, opts.systemPrompt, 'utf8');
+    claudeArgs.push(`--system-prompt-file "${systemPromptFile}"`);
   }
 
-  // Persona + append-system-prompt
+  // Persona + append-system-prompt — same file-based approach as above.
   // role: 'allmind' defaults to the AllMind persona path; caller can override with opts.persona
   const sessionPersona = opts.persona || (opts.role === 'allmind' ? ALLMIND_PERSONA_PATH : null);
   let appendSystemPrompt = '';
@@ -821,10 +824,11 @@ async function openSession(opts = {}) {
     if (appendSystemPrompt) appendSystemPrompt += '\n\n';
     appendSystemPrompt += opts.appendSystemPrompt;
   }
+  let appendPromptFile = null;
   if (appendSystemPrompt) {
-    const appendFile = join(tmpBase, 'append-prompt.txt');
-    writeFileSync(appendFile, appendSystemPrompt, 'utf8');
-    claudeArgs.push(`--append-system-prompt (Get-Content "${appendFile}" -Raw)`);
+    appendPromptFile = join(tmpBase, 'append-prompt.txt');
+    writeFileSync(appendPromptFile, appendSystemPrompt, 'utf8');
+    claudeArgs.push(`--append-system-prompt-file "${appendPromptFile}"`);
   }
 
   // MCP config control — block project-level .mcp.json for headless/pipeline roles
@@ -839,28 +843,13 @@ async function openSession(opts = {}) {
     claudeArgs.push(`"${opts.initialMessage.replace(/"/g, '`"')}"`);
   }
 
-  // Read system prompt / append prompt into variables to avoid inline subexpression issues
-  // and to log the content length for debugging
+  // Log prompt sizes for debugging (file-based flags pass paths only, no length risk)
   lines.push('');
-  lines.push('# Pre-load file-based args into variables');
-  if (opts.systemPrompt) {
-    const promptFile = join(tmpBase, 'system-prompt.txt');
-    lines.push(`$spContent = Get-Content "${promptFile}" -Raw`);
-    lines.push('Write-Host "[mercenary] System prompt: $($spContent.Length) chars" -ForegroundColor DarkGray');
-    // Replace the (Get-Content ...) subexpression in claudeArgs with $spContent
-    const idx = claudeArgs.findIndex(a => a.startsWith('--system-prompt'));
-    if (idx >= 0) {
-      claudeArgs[idx] = '--system-prompt $spContent';
-    }
+  if (systemPromptFile) {
+    lines.push(`Write-Host "[mercenary] System prompt: ${opts.systemPrompt.length} chars (file: ${systemPromptFile})" -ForegroundColor DarkGray`);
   }
-  if (appendSystemPrompt) {
-    const appendFile = join(tmpBase, 'append-prompt.txt');
-    lines.push(`$apContent = Get-Content "${appendFile}" -Raw`);
-    lines.push('Write-Host "[mercenary] Append prompt: $($apContent.Length) chars" -ForegroundColor DarkGray');
-    const idx = claudeArgs.findIndex(a => a.startsWith('--append-system-prompt'));
-    if (idx >= 0) {
-      claudeArgs[idx] = '--append-system-prompt $apContent';
-    }
+  if (appendPromptFile) {
+    lines.push(`Write-Host "[mercenary] Append prompt: ${appendSystemPrompt.length} chars (file: ${appendPromptFile})" -ForegroundColor DarkGray`);
   }
   lines.push('Write-Host "[mercenary] Launching claude..." -ForegroundColor DarkGray');
   lines.push(claudeArgs.join(' `\n  '));
