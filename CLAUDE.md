@@ -46,6 +46,23 @@ node mercenary.js --purge
 node test/mercenary.test.js
 ```
 
+## Memory System
+
+Chinvex repos use structured memory files in `docs/memory/`:
+
+- **STATE.md**: Current objective, active work, blockers, next actions
+- **CONSTRAINTS.md**: Infrastructure facts, rules, hazards (merge-only)
+- **DECISIONS.md**: Append-only decision log with dated entries
+
+**SessionStart Integration**: When you open a chinvex-managed repo, a hook runs `chinvex brief --context <name>` to load project context.
+
+**If memory files are uninitialized** (empty or bootstrap templates), the brief will show "ACTION REQUIRED" instructing you to run `/update-memory`.
+
+**The /update-memory skill** analyzes git history and populates memory files with:
+- Current state from recent commits
+- Constraints learned from bugs/infrastructure
+- Decisions with evidence (commit hashes)
+
 ## Project Memory System
 
 This project maintains institutional knowledge in `docs/project_notes/` for consistency across sessions.

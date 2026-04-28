@@ -34,6 +34,7 @@
 - `repo-agent` role is a pipeline alias: identical behavior (stream-json, `--strict-mcp-config`, MCP disabled, `workspace-write` sandbox for Codex) (added 2026-03-11)
 - When `dispatchId` is passed to `openSession()`, the launcher sets `$env:ALLMIND_DISPATCH_ID` in the child env and POSTs `mercenary_session_exit` to AllMind `/api/internal/event` after Claude exits (added 2026-03-18)
 - All spawn paths (`run()`, `openSession()`, `openHeadlessSession()`) warn to stderr when `purpose` or `origin` are not provided — callers must supply both for traceability (added 2026-03-21)
+- `appendSystemPrompt` content >8K chars must be written to a temp file; use `--append-system-prompt-file <path>` instead of inline `--append-system-prompt` to avoid Windows ENAMETOOLONG / CLI arg truncation (added 2026-04-17)
 
 ## Key Facts
 - CLI entry: `node mercenary.js --prompt "..." --timeout N`
@@ -50,6 +51,7 @@
 - Process ledger (`.process-ledger.json`) tracks `purpose` (task description) and `origin` (spawner identity) for every spawned process; both fields show in `--ps`/`--audit` output (added 2026-03-21)
 - `--resume <id>` option in `run()` — enables session continuity; strips `--no-session-persistence` and passes `--resume <id>` to claude CLI (updated 2026-03-05)
 - `--session-id <uuid>` option in `run()` / CLI — attaches to a named session; strips `--no-session-persistence` and passes `--session-id <uuid>` to claude CLI (added 2026-03-12)
+- Concept-to-files lookup table at `docs/sys/lookup.json` — check this before grep/glob searches (added 2026-04-17)
 
 ## Hazards
 - `--interactive` silently fails if `wt` or `pwsh` are not installed/discoverable on PATH
@@ -59,6 +61,7 @@
 - `--strict-mcp-config` in interactive (`openSession`) mode causes Claude to hang silently without error — interactive must use `strictMcp: false` (updated 2026-02-25)
 - Without MCP suppression, pipeline/coordinator spawns can generate ~40 conhost popup windows on Windows (updated 2026-02-25)
 - Passing `--no-session-persistence` to `openSession()` (interactive) crashes or misbehaves — only valid for `-p` one-shot mode (updated 2026-02-25)
+- Claude Code 2.1.88+ requires stdin input within ~3s when using stream-json pipe mode (`openHeadlessSession()`); failing to send stdin quickly enough causes a silent startup hang (added 2026-04-17)
 
 ## Superseded
 - (Superseded 2026-02-26) MCP fallback config path `mcp-none.json` — global mcpServers is now empty, fallback removed (18c991f)

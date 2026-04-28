@@ -30,7 +30,7 @@ Core implementation complete. Codex backend substantially implemented. Next: rea
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-03-21
-Commits covered through: b70db11dd3db9adbfa737f24dd8263297c1d6668
+Last memory update: 2026-04-18
+Commits covered through: 3c926cad86f1ca3ca26c0df47bed21797e25ba84
 
-<!-- chinvex:last-commit:b70db11dd3db9adbfa737f24dd8263297c1d6668 -->
+<!-- chinvex:last-commit:3c926cad86f1ca3ca26c0df47bed21797e25ba84 -->

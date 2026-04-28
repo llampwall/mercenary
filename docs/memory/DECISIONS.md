@@ -4,14 +4,17 @@
 # Decisions
 
 ## Recent (last 30 days)
-- Added `purpose` and `origin` fields to process ledger; all spawn paths warn to stderr when either is missing — enforces caller traceability
-- Added launcher exit hook: `openSession()` with `dispatchId` now sets `ALLMIND_DISPATCH_ID` env var and POSTs `mercenary_session_exit` to AllMind event API after Claude exits
-- Fixed `--am` persona path: updated `data/persona/` → `config/persona/` after AllMind repo relocation
-- Added `--session-id <uuid>` flag to CLI and `run()`; same session-persistence semantics as `--resume`; fixed `--resume` CLI passthrough via `valueFlags`
-- Added `repo-agent` role as a pipeline alias (stream-json, `--strict-mcp-config`, MCP disabled, `workspace-write` sandbox)
-- Codex backend now resolves native `.exe` on Windows instead of `.cmd` shim via `resolveCodexNativeExecutable()`
-- `shouldDisableCodexMcp()` and `getDefaultCodexSandbox()` added for per-run Codex MCP and sandbox policy
-- Stdin piping fallback when CLI args exceed 20K chars — avoids Windows 32K command line limit
+- Fixed ENAMETOOLONG on Windows: `appendSystemPrompt` content >8K chars now writes to temp file, uses `--append-system-prompt-file`
+- Fixed headless session startup hang on Claude Code 2.1.88+: stream-json pipe mode now sends stdin within the 3s window
+- Added concept-to-files lookup table at `docs/sys/lookup.json` for faster codebase navigation
+
+## 2026-04
+
+### 2026-04-17 — Fixed large appendSystemPrompt via temp file; fixed headless startup for Claude Code 2.1.88+
+
+- **Why:** Two related issues: (1) headless spawns with large context (lookup tables + episodic context) were crashing on Windows with ENAMETOOLONG because the full prompt was passed as a CLI arg; (2) Claude Code 2.1.88+ requires stdin input within ~3s in stream-json pipe mode, causing silent hangs.
+- **Impact:** `appendSystemPrompt` content >8K chars is written to a temp file; `--append-system-prompt-file <path>` is passed instead of inline `--append-system-prompt`. Headless session startup now sends stdin before the 3s window expires. 53 insertions, 13 deletions in `mercenary.js`.
+- **Evidence:** fca0db9
 
 ## 2026-03
 
