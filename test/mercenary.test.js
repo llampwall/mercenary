@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 // Import module exports
-import { run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnvCodex, buildCodexArgs, parseArgs, ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, checkPidAlive, discoverProcesses, readLedger, writeLedger } from '../mercenary.js';
+import { run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnv, sanitizeEnvCodex, buildCodexArgs, parseArgs, ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, checkPidAlive, discoverProcesses, readLedger, writeLedger } from '../mercenary.js';
 
 const MERCENARY = join(import.meta.dirname, '..', 'mercenary.js');
 
@@ -174,6 +174,30 @@ describe('sanitizeEnvCodex', () => {
   it('forces SHELL to pwsh', () => {
     const env = sanitizeEnvCodex();
     assert.ok(env.SHELL.includes('pwsh'), `expected SHELL to include pwsh, got: ${env.SHELL}`);
+  });
+});
+
+describe('sanitizeEnv', () => {
+  it('configures Claude local model profile when opted in', () => {
+    const env = sanitizeEnv({ useLocalModel: true });
+    assert.strictEqual(env.ANTHROPIC_BASE_URL, 'http://100.126.118.17:8001');
+    assert.strictEqual(env.ANTHROPIC_AUTH_TOKEN, 'not-needed');
+    assert.strictEqual(env.ANTHROPIC_MODEL, 'qwen3.6-27b-local');
+    assert.strictEqual(env.API_TIMEOUT_MS, '900000');
+  });
+
+  it('accepts local_model alias and local profile overrides', () => {
+    const env = sanitizeEnv({
+      local_model: true,
+      localModelUrl: 'http://127.0.0.1:4000',
+      localModelName: 'custom-local',
+      localModelTimeoutMs: 1234,
+      localModelAuthToken: 'token',
+    });
+    assert.strictEqual(env.ANTHROPIC_BASE_URL, 'http://127.0.0.1:4000');
+    assert.strictEqual(env.ANTHROPIC_AUTH_TOKEN, 'token');
+    assert.strictEqual(env.ANTHROPIC_MODEL, 'custom-local');
+    assert.strictEqual(env.API_TIMEOUT_MS, '1234');
   });
 });
 
@@ -379,6 +403,20 @@ describe('parseArgs', () => {
     const { opts } = parseArgs(['node', 'mercenary.js', '--prompt', 'hi']);
     assert.strictEqual(opts.backend, undefined);
   });
+
+  it('parses local model CLI flags', () => {
+    const { opts } = parseArgs([
+      'node',
+      'mercenary.js',
+      '--prompt',
+      'hi',
+      '--local-model',
+      '--local-model-url',
+      'http://127.0.0.1:4000',
+    ]);
+    assert.strictEqual(opts.localModel, true);
+    assert.strictEqual(opts.localModelUrl, 'http://127.0.0.1:4000');
+  });
 });
 
 describe('treeKill', () => {
@@ -426,6 +464,10 @@ describe('module exports', () => {
 
   it('exports sanitizeEnvCodex as function', () => {
     assert.equal(typeof sanitizeEnvCodex, 'function');
+  });
+
+  it('exports sanitizeEnv as function', () => {
+    assert.equal(typeof sanitizeEnv, 'function');
   });
 
   it('exports buildCodexArgs as function', () => {

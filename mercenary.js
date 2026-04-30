@@ -13,6 +13,10 @@ const ALLMIND_PERSONA_PATH = 'P:\\software\\allmind\\config\\persona\\allmind-vo
 const KNOWN_CLAUDE_PATH = 'C:\\Users\\Jordan\\.local\\bin\\claude.exe';
 const GRACE_PERIOD_MS = 5000;
 const SAFE_CLI_CHARS = 20000;
+const DEFAULT_LOCAL_MODEL_URL = 'http://100.126.118.17:8001';
+const DEFAULT_LOCAL_MODEL_NAME = 'qwen3.6-27b-local';
+const DEFAULT_LOCAL_MODEL_AUTH_TOKEN = 'not-needed';
+const DEFAULT_LOCAL_MODEL_TIMEOUT_MS = '900000';
 
 const LEDGER_PATH = join(import.meta.dirname, '.process-ledger.json');
 const SUSTAINED_DEATH_THRESHOLD = 3;   // consecutive dead checks before "resolved"
@@ -156,6 +160,29 @@ function getDefaultCodexSandbox(opts = {}, mode = 'oneshot') {
 
 // --- Environment Sanitization ---
 
+function isLocalModelEnabled(opts = {}) {
+  return Boolean(
+    opts.useLocalModel ||
+    opts.localModel === true ||
+    opts.local_model ||
+    opts.localMode ||
+    opts.local_mode
+  );
+}
+
+function getLocalModelProfile(opts = {}) {
+  return {
+    ANTHROPIC_BASE_URL: opts.localModelUrl || opts.local_model_url || DEFAULT_LOCAL_MODEL_URL,
+    ANTHROPIC_AUTH_TOKEN: opts.localModelAuthToken || opts.local_model_auth_token || DEFAULT_LOCAL_MODEL_AUTH_TOKEN,
+    ANTHROPIC_MODEL: opts.localModelName || opts.local_model_name || opts.model || DEFAULT_LOCAL_MODEL_NAME,
+    API_TIMEOUT_MS: String(opts.localModelTimeoutMs || opts.local_model_timeout_ms || DEFAULT_LOCAL_MODEL_TIMEOUT_MS),
+  };
+}
+
+function escapePowerShellString(value) {
+  return String(value).replace(/"/g, '`"');
+}
+
 function sanitizeEnv(opts = {}) {
   const env = { ...process.env };
   delete env.CLAUDECODE;
@@ -163,8 +190,8 @@ function sanitizeEnv(opts = {}) {
   delete env.ANTHROPIC_API_KEY;
   env.SHELL = 'C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe';
   env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(opts.maxTokens || 65536);
-  if (opts.useLocalModel) {
-    env.ANTHROPIC_BASE_URL = opts.localModelUrl || 'http://127.0.0.1:4000';
+  if (isLocalModelEnabled(opts)) {
+    Object.assign(env, getLocalModelProfile(opts));
   }
   return env;
 }
@@ -770,6 +797,11 @@ async function openSession(opts = {}) {
   const strictMcp = opts.strictMcp ?? false;
 
   // Build launcher PowerShell script
+  const localModelProfile = isLocalModelEnabled(opts) ? getLocalModelProfile(opts) : null;
+  const localModelEnvLines = localModelProfile
+    ? Object.entries(localModelProfile).map(([key, value]) => `$env:${key} = "${escapePowerShellString(value)}"`)
+    : [];
+
   const lines = [
     '# Mercenary launcher -- auto-generated',
     '$ErrorActionPreference = "Continue"',
@@ -781,8 +813,8 @@ async function openSession(opts = {}) {
     `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "${opts.maxTokens || 65536}"`,
     // Expose dispatch_id so the spawned session can include it in events
     ...(opts.dispatchId ? [`$env:ALLMIND_DISPATCH_ID = "${opts.dispatchId.replace(/"/g, '')}"`] : []),
-    // Route through local LiteLLM proxy when caller opts in
-    ...(opts.useLocalModel ? [`$env:ANTHROPIC_BASE_URL = "${(opts.localModelUrl || 'http://127.0.0.1:4000').replace(/"/g, '`"')}"`] : []),
+    // Route through a local Claude-compatible endpoint when caller opts in
+    ...localModelEnvLines,
   ];
 
   // Set working directory before launching claude
@@ -852,10 +884,9 @@ async function openSession(opts = {}) {
     lines.push(`Write-Host "[mercenary] Append prompt: ${appendSystemPrompt.length} chars (file: ${appendPromptFile})" -ForegroundColor DarkGray`);
   }
   lines.push('Write-Host "[mercenary] Launching claude..." -ForegroundColor DarkGray');
-  if (opts.useLocalModel) {
-    const localUrl = (opts.localModelUrl || 'http://127.0.0.1:4000').replace(/"/g, '`"');
+  if (localModelProfile) {
     lines.push('Write-Host ""');
-    lines.push(`Write-Host " LOCAL MODEL - Qwen 3.6 27B via LiteLLM proxy (${localUrl}) " -ForegroundColor Black -BackgroundColor Cyan`);
+    lines.push(`Write-Host " LOCAL MODEL - ${escapePowerShellString(localModelProfile.ANTHROPIC_MODEL)} (${escapePowerShellString(localModelProfile.ANTHROPIC_BASE_URL)}) " -ForegroundColor Black -BackgroundColor Cyan`);
     lines.push('Write-Host ""');
   }
   lines.push(claudeArgs.join(' `\n  '));
@@ -1172,12 +1203,17 @@ function parseArgs(argv) {
   const args = argv.slice(2);
   const opts = {};
   const positional = [];
-  const booleanFlags = new Set(['--json', '--am', '--interactive', '--ps', '--audit', '--purge']);
+  const booleanFlags = new Set([
+    '--json', '--am', '--interactive', '--ps', '--audit', '--purge',
+    '--local-model', '--use-local-model', '--local-mode'
+  ]);
   const valueFlags = new Set([
     '--prompt', '--timeout', '--allowed-tools', '--max-tokens',
     '--persona', '--model', '--output-format', '--append-system-prompt',
     '--max-turns', '--cwd', '--system-prompt', '--title', '--kill',
-    '--backend', '--session-id', '--resume', '--purpose', '--origin'
+    '--backend', '--session-id', '--resume', '--purpose', '--origin',
+    '--local-model-url', '--local-model-name', '--local-model-timeout-ms',
+    '--local-model-auth-token'
   ]);
 
   let i = 0;
@@ -1249,6 +1285,11 @@ async function main() {
       maxTokens: opts.maxTokens ? Number(opts.maxTokens) : undefined,
       appendSystemPrompt: opts.appendSystemPrompt,
       backend: opts.backend,
+      useLocalModel: opts.useLocalModel || opts.localModel || opts.localMode,
+      localModelUrl: opts.localModelUrl,
+      localModelName: opts.localModelName,
+      localModelTimeoutMs: opts.localModelTimeoutMs,
+      localModelAuthToken: opts.localModelAuthToken,
       purpose: opts.purpose,
       origin: opts.origin,
     });
@@ -1271,6 +1312,11 @@ async function main() {
       maxTurns: opts.maxTurns ? Number(opts.maxTurns) : undefined,
       cwd: opts.cwd,
       backend: opts.backend,
+      useLocalModel: opts.useLocalModel || opts.localModel || opts.localMode,
+      localModelUrl: opts.localModelUrl,
+      localModelName: opts.localModelName,
+      localModelTimeoutMs: opts.localModelTimeoutMs,
+      localModelAuthToken: opts.localModelAuthToken,
       resume: opts.resume,
       sessionId: opts.sessionId,
       purpose: opts.purpose,
@@ -1307,7 +1353,7 @@ if (resolve(process.argv[1]) === resolve(import.meta.filename)) {
 }
 
 export {
-  run, openSession, openHeadlessSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnvCodex, buildCodexArgs, parseArgs,
+  run, openSession, openHeadlessSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnv, sanitizeEnvCodex, buildCodexArgs, parseArgs,
   ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, ledgerPurge,
   checkPidAlive, discoverProcesses, readLedger, writeLedger, LEDGER_PATH,
 };
