@@ -884,11 +884,6 @@ async function openSession(opts = {}) {
     lines.push(`Write-Host "[mercenary] Append prompt: ${appendSystemPrompt.length} chars (file: ${appendPromptFile})" -ForegroundColor DarkGray`);
   }
   lines.push('Write-Host "[mercenary] Launching claude..." -ForegroundColor DarkGray');
-  if (localModelProfile) {
-    lines.push('Write-Host ""');
-    lines.push(`Write-Host " LOCAL MODEL - ${escapePowerShellString(localModelProfile.ANTHROPIC_MODEL)} (${escapePowerShellString(localModelProfile.ANTHROPIC_BASE_URL)}) " -ForegroundColor Black -BackgroundColor Cyan`);
-    lines.push('Write-Host ""');
-  }
   lines.push(claudeArgs.join(' `\n  '));
   lines.push('Write-Host "[mercenary] Claude exited with code $LASTEXITCODE" -ForegroundColor DarkGray');
 
