@@ -13,7 +13,7 @@ const ALLMIND_PERSONA_PATH = 'P:\\software\\allmind\\config\\persona\\allmind-vo
 const KNOWN_CLAUDE_PATH = 'C:\\Users\\Jordan\\.local\\bin\\claude.exe';
 const GRACE_PERIOD_MS = 5000;
 const SAFE_CLI_CHARS = 20000;
-const DEFAULT_LOCAL_MODEL_URL = 'http://100.126.118.17:8001';
+const DEFAULT_LOCAL_MODEL_URL = 'http://127.0.0.1:8001';
 const DEFAULT_LOCAL_MODEL_NAME = 'qwen3.6-27b-local';
 const DEFAULT_LOCAL_MODEL_AUTH_TOKEN = 'not-needed';
 const DEFAULT_LOCAL_MODEL_TIMEOUT_MS = '900000';
@@ -192,6 +192,7 @@ function sanitizeEnv(opts = {}) {
   env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(opts.maxTokens || 65536);
   if (isLocalModelEnabled(opts)) {
     Object.assign(env, getLocalModelProfile(opts));
+    env.ALLMIND_LOCAL_MODEL = '1';
   }
   return env;
 }
@@ -815,6 +816,7 @@ async function openSession(opts = {}) {
     ...(opts.dispatchId ? [`$env:ALLMIND_DISPATCH_ID = "${opts.dispatchId.replace(/"/g, '')}"`] : []),
     // Route through a local Claude-compatible endpoint when caller opts in
     ...localModelEnvLines,
+    ...(localModelProfile ? [`$env:ALLMIND_LOCAL_MODEL = "1"`] : []),
   ];
 
   // Set working directory before launching claude
