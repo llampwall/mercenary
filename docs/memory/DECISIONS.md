@@ -4,11 +4,39 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Added `ALLMIND_LOCAL_MODEL=1` env var injection alongside `ANTHROPIC_BASE_URL` on local model spawns — signals to child that the spawn is routing through local proxy
+- Added local model profile: CLI flags `--use-local-model` / `--local-model-url` parsed at entry; snake_case and camelCase aliases both accepted; `useLocalModel` env profile applied to all spawn paths
+- Fixed openSession() ENAMETOOLONG: launcher was loading temp file content back into PowerShell variables and expanding inline into argv — now passes file paths directly via `--system-prompt-file`/`--append-system-prompt-file`
+- Added `useLocalModel` opt-in: routes specific spawns through local LiteLLM/Ollama proxy via `ANTHROPIC_BASE_URL`; `localModelUrl` overrides the default `http://127.0.0.1:4000`
 - Fixed ENAMETOOLONG on Windows: `appendSystemPrompt` content >8K chars now writes to temp file, uses `--append-system-prompt-file`
-- Fixed headless session startup hang on Claude Code 2.1.88+: stream-json pipe mode now sends stdin within the 3s window
-- Added concept-to-files lookup table at `docs/sys/lookup.json` for faster codebase navigation
 
 ## 2026-04
+
+### 2026-04-30 — Inject ALLMIND_LOCAL_MODEL=1 on local model spawns
+
+- **Why:** Child processes (e.g. AllMind agents) needed a signal indicating the spawn is routing through the local LiteLLM proxy rather than the Anthropic API — `ANTHROPIC_BASE_URL` alone doesn't distinguish local proxy from other base URL overrides.
+- **Impact:** When `useLocalModel` is set on any spawn path, `ALLMIND_LOCAL_MODEL=1` is injected into the child env alongside `ANTHROPIC_BASE_URL`. Unaffected on non-local spawns.
+- **Evidence:** 022055d
+
+### 2026-04-30 — Added local model profile and CLI flags
+
+- **Why:** Callers needed a first-class way to invoke mercenary in local-model mode from the CLI without programmatic opts; also needed snake_case and camelCase alias parity with other flags.
+- **Impact:** `--use-local-model` and `--local-model-url <url>` added to CLI entry point. Both snake_case and camelCase forms parsed. `useLocalModel` env profile applied to `run()`, `openSession()`, `openHeadlessSession()`. Tests added for profile and parser.
+- **Evidence:** f9a6280
+
+### 2026-04-28 — Fixed openSession() ENAMETOOLONG via PowerShell argv expansion
+
+- **Symptom:** `openSession()` with large append prompts (~60K chars) failed with "filename or extension is too long" even though content was written to a temp file.
+- **Root cause:** The launcher script loaded the temp file back with `Get-Content -Raw` into a PowerShell variable, then passed it inline as `--append-system-prompt $apContent`. PowerShell expands the variable into argv before invoking `claude.exe`, so the full content still hit the Windows `CreateProcess()` CLI length limit.
+- **Fix:** Pass temp file paths directly via `--system-prompt-file`/`--append-system-prompt-file` flag variants — same pattern already used by `run()` and `openHeadlessSession()`.
+- **Prevention:** Never load a temp file into a variable to pass inline; always use the `-file` flag variant when content lives in a file.
+- **Evidence:** 92c46b3
+
+### 2026-04-28 — Added useLocalModel option for local proxy routing
+
+- **Why:** Callers (e.g. AllMind dispatch) needed to route specific spawns through a local LiteLLM proxy (→ Ollama) without affecting unrelated spawns.
+- **Impact:** New `useLocalModel: true` option on `run()`, `openSession()`, and `openHeadlessSession()` injects `ANTHROPIC_BASE_URL=http://127.0.0.1:4000` into the child env. `localModelUrl` overrides the default URL. 5 lines added to `mercenary.js`.
+- **Evidence:** 85c1f53
 
 ### 2026-04-17 — Fixed large appendSystemPrompt via temp file; fixed headless startup for Claude Code 2.1.88+
 

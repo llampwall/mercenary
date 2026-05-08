@@ -34,7 +34,8 @@
 - `repo-agent` role is a pipeline alias: identical behavior (stream-json, `--strict-mcp-config`, MCP disabled, `workspace-write` sandbox for Codex) (added 2026-03-11)
 - When `dispatchId` is passed to `openSession()`, the launcher sets `$env:ALLMIND_DISPATCH_ID` in the child env and POSTs `mercenary_session_exit` to AllMind `/api/internal/event` after Claude exits (added 2026-03-18)
 - All spawn paths (`run()`, `openSession()`, `openHeadlessSession()`) warn to stderr when `purpose` or `origin` are not provided — callers must supply both for traceability (added 2026-03-21)
-- `appendSystemPrompt` content >8K chars must be written to a temp file; use `--append-system-prompt-file <path>` instead of inline `--append-system-prompt` to avoid Windows ENAMETOOLONG / CLI arg truncation (added 2026-04-17)
+- `appendSystemPrompt` content >8K chars must be written to a temp file; use `--append-system-prompt-file <path>` (or `--system-prompt-file`) instead of inline flag to avoid Windows ENAMETOOLONG / CLI arg truncation — applies to ALL spawn paths (`run()`, `openSession()`, `openHeadlessSession()`); never load temp file content back into a PowerShell variable and expand inline (updated 2026-04-28)
+- When `useLocalModel` is set on a spawn, `ANTHROPIC_BASE_URL` and `ALLMIND_LOCAL_MODEL=1` are both injected into the child env; other spawns are unaffected (updated 2026-04-30)
 
 ## Key Facts
 - CLI entry: `node mercenary.js --prompt "..." --timeout N`
@@ -52,6 +53,8 @@
 - `--resume <id>` option in `run()` — enables session continuity; strips `--no-session-persistence` and passes `--resume <id>` to claude CLI (updated 2026-03-05)
 - `--session-id <uuid>` option in `run()` / CLI — attaches to a named session; strips `--no-session-persistence` and passes `--session-id <uuid>` to claude CLI (added 2026-03-12)
 - Concept-to-files lookup table at `docs/sys/lookup.json` — check this before grep/glob searches (added 2026-04-17)
+- `useLocalModel: true` routes spawn through local LiteLLM proxy at `http://127.0.0.1:4000` by default; `localModelUrl` overrides the URL — available on `run()`, `openSession()`, `openHeadlessSession()`; also sets `ALLMIND_LOCAL_MODEL=1` in child env (updated 2026-04-30)
+- CLI flags `--use-local-model` / `--local-model-url <url>` accepted at CLI entry; snake_case and camelCase aliases both parsed (added 2026-04-30)
 
 ## Hazards
 - `--interactive` silently fails if `wt` or `pwsh` are not installed/discoverable on PATH
@@ -62,6 +65,7 @@
 - Without MCP suppression, pipeline/coordinator spawns can generate ~40 conhost popup windows on Windows (updated 2026-02-25)
 - Passing `--no-session-persistence` to `openSession()` (interactive) crashes or misbehaves — only valid for `-p` one-shot mode (updated 2026-02-25)
 - Claude Code 2.1.88+ requires stdin input within ~3s when using stream-json pipe mode (`openHeadlessSession()`); failing to send stdin quickly enough causes a silent startup hang (added 2026-04-17)
+- PowerShell launcher: writing a prompt to a temp file then loading it back with `Get-Content` and expanding inline (`--flag $content`) defeats the purpose — PowerShell expands the variable into argv at CreateProcess(), hitting the Windows CLI length limit; always pass the file path via the `-file` flag variant (added 2026-04-28)
 
 ## Superseded
 - (Superseded 2026-02-26) MCP fallback config path `mcp-none.json` — global mcpServers is now empty, fallback removed (18c991f)

@@ -19,6 +19,7 @@ const DEFAULT_LOCAL_MODEL_AUTH_TOKEN = 'not-needed';
 const DEFAULT_LOCAL_MODEL_TIMEOUT_MS = '900000';
 
 const LEDGER_PATH = join(import.meta.dirname, '.process-ledger.json');
+const LOCAL_MODEL_SETTINGS_PATH = join(import.meta.dirname, 'data', 'claude-local-model-settings.json');
 const SUSTAINED_DEATH_THRESHOLD = 3;   // consecutive dead checks before "resolved"
 const PURGE_MONITOR_MINUTES = 3;       // how long purge watches after killing
 const PURGE_CHECK_INTERVAL_MS = 15000; // 15s between purge checks
@@ -177,6 +178,10 @@ function getLocalModelProfile(opts = {}) {
     ANTHROPIC_MODEL: opts.localModelName || opts.local_model_name || opts.model || DEFAULT_LOCAL_MODEL_NAME,
     API_TIMEOUT_MS: String(opts.localModelTimeoutMs || opts.local_model_timeout_ms || DEFAULT_LOCAL_MODEL_TIMEOUT_MS),
   };
+}
+
+function getLocalModelSettingsPath(opts = {}) {
+  return opts.localModelSettingsPath || opts.local_model_settings_path || LOCAL_MODEL_SETTINGS_PATH;
 }
 
 function escapePowerShellString(value) {
@@ -463,7 +468,11 @@ function loadPersona(personaPath) {
 // --- Arg Builder (one-shot) ---
 
 function buildArgs(opts) {
-  const args = ['--dangerously-skip-permissions', '--no-session-persistence'];
+  const args = [];
+  if (isLocalModelEnabled(opts)) {
+    args.push('--settings', getLocalModelSettingsPath(opts));
+  }
+  args.push('--dangerously-skip-permissions', '--no-session-persistence');
 
   // Resume or session-id -- both require session persistence, so remove the no-persistence flag
   if (opts.resume || opts.sessionId) {
@@ -825,7 +834,11 @@ async function openSession(opts = {}) {
   }
 
   // Build claude invocation args
-  const claudeArgs = [`& "${claudePath}"`, '--dangerously-skip-permissions'];
+  const claudeArgs = [`& "${claudePath}"`];
+  if (localModelProfile) {
+    claudeArgs.push(`--settings "${escapePowerShellString(getLocalModelSettingsPath(opts))}"`);
+  }
+  claudeArgs.push('--dangerously-skip-permissions');
 
   // Tool restrictions
   if (allowedTools) {
@@ -951,7 +964,11 @@ async function openHeadlessSession(opts = {}) {
   const claudePath = resolveClaudePath();
   const env = sanitizeEnv(opts);
 
-  const args = ['--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'];
+  const args = [];
+  if (isLocalModelEnabled(opts)) {
+    args.push('--settings', getLocalModelSettingsPath(opts));
+  }
+  args.push('--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose');
 
   // System prompt
   if (opts.systemPrompt) {
@@ -1210,7 +1227,7 @@ function parseArgs(argv) {
     '--max-turns', '--cwd', '--system-prompt', '--title', '--kill',
     '--backend', '--session-id', '--resume', '--purpose', '--origin',
     '--local-model-url', '--local-model-name', '--local-model-timeout-ms',
-    '--local-model-auth-token'
+    '--local-model-auth-token', '--local-model-settings-path'
   ]);
 
   let i = 0;
@@ -1287,6 +1304,7 @@ async function main() {
       localModelName: opts.localModelName,
       localModelTimeoutMs: opts.localModelTimeoutMs,
       localModelAuthToken: opts.localModelAuthToken,
+      localModelSettingsPath: opts.localModelSettingsPath,
       purpose: opts.purpose,
       origin: opts.origin,
     });
@@ -1314,6 +1332,7 @@ async function main() {
       localModelName: opts.localModelName,
       localModelTimeoutMs: opts.localModelTimeoutMs,
       localModelAuthToken: opts.localModelAuthToken,
+      localModelSettingsPath: opts.localModelSettingsPath,
       resume: opts.resume,
       sessionId: opts.sessionId,
       purpose: opts.purpose,

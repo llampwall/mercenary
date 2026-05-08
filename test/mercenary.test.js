@@ -180,7 +180,7 @@ describe('sanitizeEnvCodex', () => {
 describe('sanitizeEnv', () => {
   it('configures Claude local model profile when opted in', () => {
     const env = sanitizeEnv({ useLocalModel: true });
-    assert.strictEqual(env.ANTHROPIC_BASE_URL, 'http://100.126.118.17:8001');
+    assert.strictEqual(env.ANTHROPIC_BASE_URL, 'http://127.0.0.1:8001');
     assert.strictEqual(env.ANTHROPIC_AUTH_TOKEN, 'not-needed');
     assert.strictEqual(env.ANTHROPIC_MODEL, 'qwen3.6-27b-local');
     assert.strictEqual(env.API_TIMEOUT_MS, '900000');
