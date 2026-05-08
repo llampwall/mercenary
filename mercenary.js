@@ -198,6 +198,8 @@ function sanitizeEnv(opts = {}) {
   if (isLocalModelEnabled(opts)) {
     Object.assign(env, getLocalModelProfile(opts));
     env.ALLMIND_LOCAL_MODEL = '1';
+    env.CLAUDECODE = '1';
+    env.CLAUDE_CODE_ENTRYPOINT = 'cli';
   }
   return env;
 }
