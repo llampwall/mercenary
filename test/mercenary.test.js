@@ -181,9 +181,14 @@ describe('sanitizeEnv', () => {
   it('configures Claude local model profile when opted in', () => {
     const env = sanitizeEnv({ useLocalModel: true });
     assert.strictEqual(env.ANTHROPIC_BASE_URL, 'http://127.0.0.1:8001');
-    assert.strictEqual(env.ANTHROPIC_AUTH_TOKEN, 'not-needed');
-    assert.strictEqual(env.ANTHROPIC_MODEL, 'qwen3.6-27b-local');
+    // ANTHROPIC_MODEL must NOT be set — it's broken on Claude Code 2.1.132
+    // (flips API-billing banner while being ignored for model selection).
+    // Model selection happens via the --model CLI flag instead.
+    assert.strictEqual(env.ANTHROPIC_MODEL, undefined);
     assert.strictEqual(env.API_TIMEOUT_MS, '900000');
+    // ANTHROPIC_AUTH_TOKEN must remain unset — setting it flips Claude Code into
+    // API-billing mode and triggers the native-Windows enterprise sandbox gate.
+    assert.strictEqual(env.ANTHROPIC_AUTH_TOKEN, undefined);
   });
 
   it('accepts local_model alias and local profile overrides', () => {
@@ -192,12 +197,11 @@ describe('sanitizeEnv', () => {
       localModelUrl: 'http://127.0.0.1:4000',
       localModelName: 'custom-local',
       localModelTimeoutMs: 1234,
-      localModelAuthToken: 'token',
     });
     assert.strictEqual(env.ANTHROPIC_BASE_URL, 'http://127.0.0.1:4000');
-    assert.strictEqual(env.ANTHROPIC_AUTH_TOKEN, 'token');
-    assert.strictEqual(env.ANTHROPIC_MODEL, 'custom-local');
+    assert.strictEqual(env.ANTHROPIC_MODEL, undefined);
     assert.strictEqual(env.API_TIMEOUT_MS, '1234');
+    assert.strictEqual(env.ANTHROPIC_AUTH_TOKEN, undefined);
   });
 });
 

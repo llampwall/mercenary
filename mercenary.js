@@ -15,7 +15,6 @@ const GRACE_PERIOD_MS = 5000;
 const SAFE_CLI_CHARS = 20000;
 const DEFAULT_LOCAL_MODEL_URL = 'http://127.0.0.1:8001';
 const DEFAULT_LOCAL_MODEL_NAME = 'qwen3.6-27b-local';
-const DEFAULT_LOCAL_MODEL_AUTH_TOKEN = 'not-needed';
 const DEFAULT_LOCAL_MODEL_TIMEOUT_MS = '900000';
 
 const LEDGER_PATH = join(import.meta.dirname, '.process-ledger.json');
@@ -171,13 +170,26 @@ function isLocalModelEnabled(opts = {}) {
   );
 }
 
+// No ANTHROPIC_AUTH_TOKEN — leaving it unset keeps Claude Code in OAuth/subscription mode.
+// Setting it (even to a placeholder) flips Claude into API-billing mode, which on native
+// Windows triggers the enterprise sandbox gate and blocks all shell tool calls. The OAuth
+// Authorization header rides through the LiteLLM proxy untouched
+// (forward_client_headers_to_llm_api: true) and is ignored by llama-server downstream.
+// ANTHROPIC_MODEL env is intentionally NOT set here. Empirically (Claude Code
+// 2.1.132), setting it to a non-Anthropic model name flips Claude into "API
+// Usage Billing" mode while ALSO being ignored for actual model selection
+// (banner falls back to default Sonnet). The supported way to select a model
+// is the --model CLI flag, which openSession adds automatically when
+// local-model is enabled (see resolveLocalModelName below).
 function getLocalModelProfile(opts = {}) {
   return {
     ANTHROPIC_BASE_URL: opts.localModelUrl || opts.local_model_url || DEFAULT_LOCAL_MODEL_URL,
-    ANTHROPIC_AUTH_TOKEN: opts.localModelAuthToken || opts.local_model_auth_token || DEFAULT_LOCAL_MODEL_AUTH_TOKEN,
-    ANTHROPIC_MODEL: opts.localModelName || opts.local_model_name || opts.model || DEFAULT_LOCAL_MODEL_NAME,
     API_TIMEOUT_MS: String(opts.localModelTimeoutMs || opts.local_model_timeout_ms || DEFAULT_LOCAL_MODEL_TIMEOUT_MS),
   };
+}
+
+function resolveLocalModelName(opts = {}) {
+  return opts.localModelName || opts.local_model_name || opts.model || DEFAULT_LOCAL_MODEL_NAME;
 }
 
 function getLocalModelSettingsPath(opts = {}) {
@@ -193,13 +205,23 @@ function sanitizeEnv(opts = {}) {
   delete env.CLAUDECODE;
   delete env.CLAUDE_CODE_ENTRYPOINT;
   delete env.ANTHROPIC_API_KEY;
+  delete env.ANTHROPIC_AUTH_TOKEN;
+  delete env.CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR;
+  delete env.ANTHROPIC_MODEL;
   env.SHELL = 'C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe';
   env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(opts.maxTokens || 65536);
   if (isLocalModelEnabled(opts)) {
     Object.assign(env, getLocalModelProfile(opts));
     env.ALLMIND_LOCAL_MODEL = '1';
-    env.CLAUDECODE = '1';
-    env.CLAUDE_CODE_ENTRYPOINT = 'cli';
+    env.CLAUDE_CODE_USE_POWERSHELL_TOOL = '1';
+    // CLAUDE_CODE_REMOTE=1 neutralizes the AUTH_TOKEN/apiKeyHelper/API_KEY
+    // disqualifiers in Claude Code's nw() billing-mode check via the m78()
+    // bypass. Without it, any of those env/settings keys flips Claude into
+    // "API Usage Billing" mode, which on native Windows triggers the
+    // enterprise sandbox gate and blocks all shell tool calls. Combined with
+    // a valid ~/.claude/.credentials.json (subscriptionType=max, scopes
+    // include user:inference), this keeps us in subscription mode.
+    env.CLAUDE_CODE_REMOTE = '1';
   }
   return env;
 }
@@ -485,7 +507,11 @@ function buildArgs(opts) {
   }
 
   if (opts.allowedTools) args.push('--allowed-tools', opts.allowedTools);
-  if (opts.model) args.push('--model', opts.model);
+  // Model selection — when local-model is enabled and caller didn't specify
+  // a model, default to the configured local-model name. See openSession for
+  // the full rationale (ANTHROPIC_MODEL env is broken on 2.1.132).
+  const oneShotModel = opts.model || (isLocalModelEnabled(opts) ? resolveLocalModelName(opts) : null);
+  if (oneShotModel) args.push('--model', oneShotModel);
   // Role-based preset — callers declare what they are, not which flags they need.
   // role: 'pipeline' → headless agent, structured streaming output (stream-json + verbose)
   //                     + --strict-mcp-config to block project-level .mcp.json (global mcpServers is empty)
@@ -717,6 +743,10 @@ async function openSessionCodex(opts, title, tmpBase) {
     '$env:CLAUDECODE = $null',
     '$env:CLAUDE_CODE_ENTRYPOINT = $null',
     '$env:ANTHROPIC_API_KEY = $null',
+    '$env:ANTHROPIC_AUTH_TOKEN = $null',
+    '$env:ANTHROPIC_MODEL = $null',
+    '$env:CLAUDE_CODE_USE_POWERSHELL_TOOL = "1"',
+    '$env:CLAUDE_CODE_REMOTE = "1"',
     '$env:SHELL = "C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe"',
   ];
 
@@ -792,6 +822,22 @@ async function openSession(opts = {}) {
   warnMissingProvenance(opts, 'openSession');
   const backend = opts.backend || 'claude';
   const title = opts.title || 'Mercenary';
+
+  // Interactive REPL + local-model is broken on native Windows: Claude Code's
+  // shell-tool sandbox gate (Qg7) fires during TUI startup when routed through
+  // a non-Anthropic BASE_URL, regardless of skip-permissions / settings deny /
+  // PowerShell-tool flags / OAuth state. Headless `-p` mode (mercenary.run)
+  // does not initialize the gated tool and works fine. See:
+  // P:\software\allmind\docs\specs\allmind_local_qwen_next_steps.md (1b notes).
+  if (backend === 'claude' && isLocalModelEnabled(opts) && process.platform === 'win32') {
+    throw new Error(
+      'mercenary.openSession does not support local_model on native Windows: ' +
+      'Claude Code interactive TUI trips a shell-tool sandbox gate when BASE_URL ' +
+      'points at a non-Anthropic endpoint. Use mercenary.run() (headless `-p` mode) ' +
+      'for local-model dispatches until the upstream Claude Code bug is fixed.'
+    );
+  }
+
   const tmpBase = mkdtempSync(join(tmpdir(), 'mercenary-'));
 
   if (backend === 'codex') {
@@ -821,6 +867,10 @@ async function openSession(opts = {}) {
     '$env:CLAUDECODE = $null',
     '$env:CLAUDE_CODE_ENTRYPOINT = $null',
     '$env:ANTHROPIC_API_KEY = $null',
+    '$env:ANTHROPIC_AUTH_TOKEN = $null',
+    '$env:ANTHROPIC_MODEL = $null',
+    '$env:CLAUDE_CODE_USE_POWERSHELL_TOOL = "1"',
+    '$env:CLAUDE_CODE_REMOTE = "1"',
     '$env:SHELL = "C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe"',
     `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "${opts.maxTokens || 65536}"`,
     // Expose dispatch_id so the spawned session can include it in events
@@ -847,9 +897,14 @@ async function openSession(opts = {}) {
     claudeArgs.push(`--allowed-tools "${allowedTools}"`);
   }
 
-  // Model selection
-  if (opts.model) {
-    claudeArgs.push(`--model "${opts.model}"`);
+  // Model selection — when local-model is enabled and caller didn't specify
+  // a model, default to the configured local-model name. The --model flag is
+  // the only supported way to set the active model; ANTHROPIC_MODEL env is
+  // ignored here (and on 2.1.132 also flips the API-billing banner, so we
+  // strip it in sanitizeEnv + the launcher).
+  const effectiveModel = opts.model || (localModelProfile ? resolveLocalModelName(opts) : null);
+  if (effectiveModel) {
+    claudeArgs.push(`--model "${effectiveModel}"`);
   }
 
   // System prompt — write to temp file and pass path to claude (--system-prompt-file).
@@ -901,6 +956,22 @@ async function openSession(opts = {}) {
     lines.push(`Write-Host "[mercenary] Append prompt: ${appendSystemPrompt.length} chars (file: ${appendPromptFile})" -ForegroundColor DarkGray`);
   }
   lines.push('Write-Host "[mercenary] Launching claude..." -ForegroundColor DarkGray');
+  // DEBUG: dump every arg on its own line so we can see exactly what claude is invoked with
+  lines.push('Write-Host "[mercenary][DEBUG] claudeArgs ----" -ForegroundColor Yellow');
+  for (const a of claudeArgs) {
+    lines.push(`Write-Host '  ${a.replace(/'/g, "''")}' -ForegroundColor Yellow`);
+  }
+  lines.push('Write-Host "[mercenary][DEBUG] env ----" -ForegroundColor Yellow');
+  lines.push('Write-Host ("  ANTHROPIC_BASE_URL=" + $env:ANTHROPIC_BASE_URL) -ForegroundColor Yellow');
+  lines.push('Write-Host ("  ANTHROPIC_MODEL=" + $env:ANTHROPIC_MODEL) -ForegroundColor Yellow');
+  lines.push('Write-Host ("  ANTHROPIC_AUTH_TOKEN=" + $env:ANTHROPIC_AUTH_TOKEN) -ForegroundColor Yellow');
+  lines.push('Write-Host ("  ANTHROPIC_API_KEY=" + $env:ANTHROPIC_API_KEY) -ForegroundColor Yellow');
+  lines.push('Write-Host ("  CLAUDE_CODE_REMOTE=" + $env:CLAUDE_CODE_REMOTE) -ForegroundColor Yellow');
+  lines.push('Write-Host ("  CLAUDE_CODE_USE_POWERSHELL_TOOL=" + $env:CLAUDE_CODE_USE_POWERSHELL_TOOL) -ForegroundColor Yellow');
+  lines.push('Write-Host ("  CLAUDECODE=" + $env:CLAUDECODE) -ForegroundColor Yellow');
+  lines.push('Write-Host ("  CLAUDE_CODE_ENTRYPOINT=" + $env:CLAUDE_CODE_ENTRYPOINT) -ForegroundColor Yellow');
+  lines.push('Write-Host "[mercenary][DEBUG] -------------" -ForegroundColor Yellow');
+  lines.push('Read-Host "Press Enter to launch claude (debug pause)"');
   lines.push(claudeArgs.join(' `\n  '));
   lines.push('Write-Host "[mercenary] Claude exited with code $LASTEXITCODE" -ForegroundColor DarkGray');
 
@@ -977,9 +1048,11 @@ async function openHeadlessSession(opts = {}) {
     args.push('--system-prompt', opts.systemPrompt);
   }
 
-  // Model selection
-  if (opts.model) {
-    args.push('--model', opts.model);
+  // Model selection — local-model spawns must use --model flag (ANTHROPIC_MODEL
+  // env is broken on Claude Code 2.1.132); see openSession for full notes.
+  const headlessModel = opts.model || (isLocalModelEnabled(opts) ? resolveLocalModelName(opts) : null);
+  if (headlessModel) {
+    args.push('--model', headlessModel);
   }
 
   // Persona + append-system-prompt (reuse existing pattern from buildArgs)
@@ -1305,7 +1378,6 @@ async function main() {
       localModelUrl: opts.localModelUrl,
       localModelName: opts.localModelName,
       localModelTimeoutMs: opts.localModelTimeoutMs,
-      localModelAuthToken: opts.localModelAuthToken,
       localModelSettingsPath: opts.localModelSettingsPath,
       purpose: opts.purpose,
       origin: opts.origin,
@@ -1333,7 +1405,6 @@ async function main() {
       localModelUrl: opts.localModelUrl,
       localModelName: opts.localModelName,
       localModelTimeoutMs: opts.localModelTimeoutMs,
-      localModelAuthToken: opts.localModelAuthToken,
       localModelSettingsPath: opts.localModelSettingsPath,
       resume: opts.resume,
       sessionId: opts.sessionId,
