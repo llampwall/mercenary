@@ -823,20 +823,14 @@ async function openSession(opts = {}) {
   const backend = opts.backend || 'claude';
   const title = opts.title || 'Mercenary';
 
-  // Interactive REPL + local-model is broken on native Windows: Claude Code's
-  // shell-tool sandbox gate (Qg7) fires during TUI startup when routed through
-  // a non-Anthropic BASE_URL, regardless of skip-permissions / settings deny /
-  // PowerShell-tool flags / OAuth state. Headless `-p` mode (mercenary.run)
-  // does not initialize the gated tool and works fine. See:
+  // Interactive REPL + local-model on native Windows: Claude Code's shell-tool
+  // sandbox gate (Qg7) fires when the model invokes Bash/PowerShell with a
+  // non-Anthropic BASE_URL — boot is fine, Read/Edit/Write/Glob/Grep are fine,
+  // only shell tool calls crash the session. Force a shell-free toolset and
+  // tell the model not to attempt shell. See:
   // P:\software\allmind\docs\specs\allmind_local_qwen_next_steps.md (1b notes).
-  if (backend === 'claude' && isLocalModelEnabled(opts) && process.platform === 'win32') {
-    throw new Error(
-      'mercenary.openSession does not support local_model on native Windows: ' +
-      'Claude Code interactive TUI trips a shell-tool sandbox gate when BASE_URL ' +
-      'points at a non-Anthropic endpoint. Use mercenary.run() (headless `-p` mode) ' +
-      'for local-model dispatches until the upstream Claude Code bug is fixed.'
-    );
-  }
+  const noShellLocalWindows =
+    backend === 'claude' && isLocalModelEnabled(opts) && process.platform === 'win32';
 
   const tmpBase = mkdtempSync(join(tmpdir(), 'mercenary-'));
 
@@ -848,8 +842,11 @@ async function openSession(opts = {}) {
 
   // Role-based preset — callers declare what they are, not which flags they need.
   // role: 'coordinator' → interactive observer with standard pipeline toolset + no user MCP servers
-  const allowedTools = opts.allowedTools ??
-    (opts.role === 'coordinator' ? 'Bash,Read,Edit,Write,Glob,Grep' : undefined);
+  // noShellLocalWindows → shell tools stripped to dodge the Qg7 invocation crash
+  const allowedTools = noShellLocalWindows
+    ? 'Read,Edit,Write,Glob,Grep'
+    : (opts.allowedTools ??
+        (opts.role === 'coordinator' ? 'Bash,Read,Edit,Write,Glob,Grep' : undefined));
   // Coordinator sessions are interactive (visible terminal) — MCP suppression
   // caused hangs; coordinators don't need strict MCP since they're supervised.
   const strictMcp = opts.strictMcp ?? false;
@@ -927,6 +924,15 @@ async function openSession(opts = {}) {
   if (opts.appendSystemPrompt) {
     if (appendSystemPrompt) appendSystemPrompt += '\n\n';
     appendSystemPrompt += opts.appendSystemPrompt;
+  }
+  if (noShellLocalWindows) {
+    if (appendSystemPrompt) appendSystemPrompt += '\n\n';
+    appendSystemPrompt +=
+      'IMPORTANT: This interactive session runs against a local model on native Windows. ' +
+      'Shell tools (Bash, PowerShell) are intentionally unavailable — invoking them will crash the session. ' +
+      'Stick to Read, Edit, Write, Glob, and Grep. If a task needs git, npm, tests, or any shell command, ' +
+      'tell the operator and stop — do not attempt the shell call. For shell-driven work, the operator should ' +
+      'redispatch headless via mercenary.run() / claude -p (allmind.mercenary.spawn_headless).';
   }
   let appendPromptFile = null;
   if (appendSystemPrompt) {
