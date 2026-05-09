@@ -977,7 +977,6 @@ async function openSession(opts = {}) {
   lines.push('Write-Host ("  CLAUDECODE=" + $env:CLAUDECODE) -ForegroundColor Yellow');
   lines.push('Write-Host ("  CLAUDE_CODE_ENTRYPOINT=" + $env:CLAUDE_CODE_ENTRYPOINT) -ForegroundColor Yellow');
   lines.push('Write-Host "[mercenary][DEBUG] -------------" -ForegroundColor Yellow');
-  lines.push('Read-Host "Press Enter to launch claude (debug pause)"');
   lines.push(claudeArgs.join(' `\n  '));
   lines.push('Write-Host "[mercenary] Claude exited with code $LASTEXITCODE" -ForegroundColor DarkGray');
 
