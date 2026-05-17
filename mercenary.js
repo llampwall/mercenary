@@ -11,11 +11,25 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 const ALLMIND_PERSONA_PATH = 'P:\\software\\allmind\\config\\persona\\allmind-voice.md';
 const KNOWN_CLAUDE_PATH = 'C:\\Users\\Jordan\\.local\\bin\\claude.exe';
+// Interactive wt tabs must bypass the global pwsh-shim (P:\software\pwsh-shim),
+// which FreeConsole's and runs pwsh-real.exe detached with CREATE_NO_WINDOW —
+// correct for background flash suppression, fatal for visible terminals.
+// Resolve to the renamed MSI pwsh directly; fall back to bare 'pwsh' if absent.
+const REAL_PWSH_PATH = 'C:\\Program Files\\PowerShell\\7\\pwsh-real.exe';
+function resolveInteractivePwsh() {
+  return existsSync(REAL_PWSH_PATH) ? REAL_PWSH_PATH : 'pwsh';
+}
 const GRACE_PERIOD_MS = 5000;
 const SAFE_CLI_CHARS = 20000;
 const DEFAULT_LOCAL_MODEL_URL = 'http://127.0.0.1:8001';
 const DEFAULT_LOCAL_MODEL_NAME = 'qwen3.6-27b-local';
 const DEFAULT_LOCAL_MODEL_TIMEOUT_MS = '900000';
+// Pin a known-good codex model. The CLI's own default ('gpt-5.5' as of
+// 2026-05-15) is rejected by the installed Codex CLI ("requires newer
+// version"). Every current AllMind caller passes its own --model; this
+// default protects future callers that omit it. See
+// docs/specs/usage-ledger.md "Known gotchas" and docs/specs/tier-and-trim.md.
+const DEFAULT_CODEX_MODEL = 'gpt-5.4';
 
 const LEDGER_PATH = join(import.meta.dirname, '.process-ledger.json');
 const LOCAL_MODEL_SETTINGS_PATH = join(import.meta.dirname, 'data', 'claude-local-model-settings.json');
@@ -582,7 +596,8 @@ function buildCodexArgs(opts, warn = (msg) => process.stderr.write(`mercenary: $
   }
   args.push('--ephemeral');
 
-  if (opts.model) args.push('--model', opts.model);
+  const codexModel = opts.model || DEFAULT_CODEX_MODEL;
+  args.push('--model', codexModel);
 
   if (opts.role === 'pipeline' || opts.role === 'repo-agent' || opts.streaming) {
     args.push('--json');
@@ -802,7 +817,7 @@ async function openSessionCodex(opts, title, tmpBase) {
 
   const wtArgs = ['-w', '0', 'nt', '--title', title];
   if (opts.cwd) wtArgs.push('-d', opts.cwd);
-  wtArgs.push('pwsh', '-NoProfile', '-NoExit', '-File', launcherPath);
+  wtArgs.push(resolveInteractivePwsh(), '-NoProfile', '-NoExit', '-File', launcherPath);
 
   const proc = spawn('wt', wtArgs, {
     detached: true,
@@ -1001,7 +1016,7 @@ async function openSession(opts = {}) {
   // Spawn Windows Terminal — pass cwd as -d so the tab opens in the right directory
   const wtArgs = ['-w', '0', 'nt', '--title', title];
   if (opts.cwd) wtArgs.push('-d', opts.cwd);
-  wtArgs.push('pwsh', '-NoProfile', '-NoExit', '-File', launcherPath);
+  wtArgs.push(resolveInteractivePwsh(), '-NoProfile', '-NoExit', '-File', launcherPath);
 
   const proc = spawn('wt', wtArgs, {
     detached: true,
