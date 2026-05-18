@@ -713,6 +713,17 @@ describe('integration', () => {
     assert.equal(typeof result.durationMs, 'number');
     assert.equal(typeof result.pid, 'number');
     assert.ok(result.stdout.includes('MERCENARY_TEST_OK'), `stdout should contain test string, got: ${result.stdout.slice(0, 200)}`);
+
+    // Observability fields — present and non-NaN
+    assert.ok(typeof result.spawnMs === 'number' && !isNaN(result.spawnMs), `spawnMs should be a non-NaN number, got ${result.spawnMs}`);
+    assert.ok(result.firstByteMs === null || (typeof result.firstByteMs === 'number' && !isNaN(result.firstByteMs)), `firstByteMs should be null or non-NaN number, got ${result.firstByteMs}`);
+    assert.ok(typeof result.promptBytes === 'number' && !isNaN(result.promptBytes), `promptBytes should be a non-NaN number, got ${result.promptBytes}`);
+    assert.ok(typeof result.concurrentAtStart === 'number' && !isNaN(result.concurrentAtStart), `concurrentAtStart should be a non-NaN number, got ${result.concurrentAtStart}`);
+    assert.ok(typeof result.backend === 'string', `backend should be a string, got ${typeof result.backend}`);
+    assert.ok('model' in result, 'result should have model field');
+    assert.ok('role' in result, 'result should have role field');
+    assert.ok(result.model === null || typeof result.model === 'string', `model should be null or string, got ${result.model}`);
+    assert.ok(result.role === null || typeof result.role === 'string', `role should be null or string, got ${result.role}`);
   });
 
   it('one-shot JSON mode via CLI', async (t) => {
@@ -834,5 +845,41 @@ describe('integration', () => {
     const entry = ledger.entries[String(spawnedPid)];
     assert.ok(entry, `entry for PID ${spawnedPid} should exist in ledger`);
     assert.strictEqual(entry.status, 'dead', `expected status dead, got ${entry.status}`);
+  });
+});
+
+// =============================================================================
+// run() timeout path — real helper child, no integration flag required
+// =============================================================================
+
+describe('run() timeout path', () => {
+  it('killedReason === timeout, timedOut === true, firstByteMs is number or null', async () => {
+    // Use the codex backend with CODEX_PATH=node.exe and a temp dir containing
+    // an 'exec' script.  run() codex path spawns: node.exe exec [codex-flags] prompt
+    // Node resolves 'exec' relative to opts.cwd, runs it, and the script
+    // immediately writes one byte then sleeps until treeKill fires.
+    // node.exe is a real .exe — no EINVAL from the windowsHide+detached combo
+    // that breaks .cmd files.
+    const tmpDir = mkdtempSync(join(tmpdir(), 'merc-timeout-helper-'));
+    writeFileSync(
+      join(tmpDir, 'exec'),
+      "process.stdout.write('STARTED\\n'); setTimeout(function(){}, 60000);\n",
+      'utf8'
+    );
+
+    const origCodexPath = process.env.CODEX_PATH;
+    try {
+      process.env.CODEX_PATH = process.execPath; // node.exe — a real .exe
+      const result = await run({ backend: 'codex', cwd: tmpDir, prompt: 'test', timeout: 2 });
+      assert.strictEqual(result.killedReason, 'timeout', `expected killedReason 'timeout', got '${result.killedReason}'`);
+      assert.strictEqual(result.timedOut, true, `expected timedOut true, got ${result.timedOut}`);
+      assert.ok(
+        result.firstByteMs === null || (typeof result.firstByteMs === 'number' && !isNaN(result.firstByteMs)),
+        `firstByteMs should be null or a non-NaN number, got ${result.firstByteMs}`
+      );
+    } finally {
+      if (origCodexPath != null) process.env.CODEX_PATH = origCodexPath;
+      else delete process.env.CODEX_PATH;
+    }
   });
 });
