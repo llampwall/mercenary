@@ -4,7 +4,7 @@
 // Single file: module exports + CLI entry point
 
 import { spawn, execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdtempSync, existsSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdtempSync, existsSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -20,6 +20,7 @@ function resolveInteractivePwsh() {
   return existsSync(REAL_PWSH_PATH) ? REAL_PWSH_PATH : 'pwsh';
 }
 const GRACE_PERIOD_MS = 5000;
+const TIMING_LOG_PATH_DEFAULT = join(import.meta.dirname, 'mercenary-timing.jsonl');
 const SAFE_CLI_CHARS = 20000;
 const DEFAULT_LOCAL_MODEL_URL = 'http://127.0.0.1:8001';
 const DEFAULT_LOCAL_MODEL_NAME = 'qwen3.6-27b-local';
@@ -678,6 +679,14 @@ function run(opts = {}) {
     }
 
     const startTime = Date.now();
+    const promptBytes = Buffer.byteLength(opts.prompt, 'utf8');
+
+    // Snapshot alive count before registering this process
+    let concurrentAtStart = 0;
+    try {
+      const snap = readLedger();
+      concurrentAtStart = Object.values(snap.entries).filter(e => e.status === 'alive').length;
+    } catch { /* ledger read failure is non-fatal */ }
 
     const proc = spawn(binaryPath, spawnArgs, {
       cwd: opts.cwd || process.cwd(),
@@ -688,6 +697,10 @@ function run(opts = {}) {
       env
     });
     proc.unref();
+
+    // spawnMs: time from startTime to OS process creation
+    let spawnMs = null;
+    proc.on('spawn', () => { spawnMs = Date.now() - startTime; });
 
     if (useStdinForPrompt) {
       proc.stdin.on('error', () => {}); // Swallow EPIPE if process exits early
@@ -705,13 +718,17 @@ function run(opts = {}) {
     let stdout = '';
     let stderr = '';
     let killed = false;
+    let killedReason = null; // 'timeout' | 'caller' | null
+    let firstByteMs = null;
     let timer = null;
 
     proc.stdout.on('data', (chunk) => {
+      if (firstByteMs === null) firstByteMs = Date.now() - startTime;
       stdout += chunk;
       if (opts.onData) opts.onData(chunk, 'stdout');
     });
     proc.stderr.on('data', (chunk) => {
+      if (firstByteMs === null) firstByteMs = Date.now() - startTime;
       stderr += chunk;
       if (opts.onData) opts.onData(chunk, 'stderr');
     });
@@ -720,6 +737,7 @@ function run(opts = {}) {
       const timeoutMs = opts.timeout * 1000;
       timer = setTimeout(() => {
         killed = true;
+        killedReason = 'timeout';
         treeKill(proc.pid);
         setTimeout(() => { treeKill(proc.pid); }, GRACE_PERIOD_MS);
       }, timeoutMs);
@@ -728,13 +746,46 @@ function run(opts = {}) {
     proc.on('close', (exitCode) => {
       if (timer) clearTimeout(timer);
       try { ledgerMarkDead(proc.pid); } catch { /* ledger failure */ }
+      const durationMs = Date.now() - startTime;
+      const resolvedExitCode = killed ? 124 : (exitCode ?? 1);
+
+      if (process.env.MERCENARY_TIMING_LOG === '1') {
+        const row = {
+          ts: new Date().toISOString(),
+          pid: proc.pid,
+          backend,
+          model: opts.model || null,
+          role: opts.role || null,
+          promptBytes,
+          spawnMs,
+          firstByteMs,
+          durationMs,
+          exitCode: resolvedExitCode,
+          timedOut: killed,
+          killedReason,
+          concurrentAtStart,
+          purpose: opts.purpose || null,
+          origin: opts.origin || null,
+        };
+        const logPath = process.env.MERCENARY_TIMING_LOG_PATH || TIMING_LOG_PATH_DEFAULT;
+        try { appendFileSync(logPath, JSON.stringify(row) + '\n', 'utf8'); } catch { /* sink failure is non-fatal */ }
+      }
+
       resolve({
         stdout: stdout.trimEnd(),
         stderr: stderr.trimEnd(),
-        exitCode: killed ? 124 : (exitCode ?? 1),
+        exitCode: resolvedExitCode,
         timedOut: killed,
-        durationMs: Date.now() - startTime,
-        pid: proc.pid
+        durationMs,
+        pid: proc.pid,
+        spawnMs,
+        firstByteMs,
+        promptBytes,
+        concurrentAtStart,
+        killedReason,
+        backend,
+        model: opts.model || null,
+        role: opts.role || null,
       });
     });
 
