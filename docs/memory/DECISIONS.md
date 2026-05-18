@@ -4,11 +4,46 @@
 # Decisions
 
 ## Recent (last 30 days)
-- Added `ALLMIND_LOCAL_MODEL=1` env var injection alongside `ANTHROPIC_BASE_URL` on local model spawns — signals to child that the spawn is routing through local proxy
-- Added local model profile: CLI flags `--use-local-model` / `--local-model-url` parsed at entry; snake_case and camelCase aliases both accepted; `useLocalModel` env profile applied to all spawn paths
-- Fixed openSession() ENAMETOOLONG: launcher was loading temp file content back into PowerShell variables and expanding inline into argv — now passes file paths directly via `--system-prompt-file`/`--append-system-prompt-file`
-- Added `useLocalModel` opt-in: routes specific spawns through local LiteLLM/Ollama proxy via `ANTHROPIC_BASE_URL`; `localModelUrl` overrides the default `http://127.0.0.1:4000`
-- Fixed ENAMETOOLONG on Windows: `appendSystemPrompt` content >8K chars now writes to temp file, uses `--append-system-prompt-file`
+- Pinned Codex default model to `gpt-5.4` in `buildCodexArgs`; always passes `--model` to avoid Codex CLI default changes breaking callers that omit the flag
+- Fixed local-model openSession shell tool block: replaced unconditional throw with allowedTools override (Read/Edit/Write/Glob/Grep) + append-system-prompt notice; shell work still routes headless
+- Fixed local-model OAuth mode: dropped `ANTHROPIC_AUTH_TOKEN` (was flipping API-billing mode), stripped `ANTHROPIC_MODEL` env, moved model selection to `--model` flag; both launcher.ps1 templates null these vars
+- Preserved `CLAUDECODE`/`CLAUDE_CODE_ENTRYPOINT` in local-model `sanitizeEnv` branch to match interactive CC session env shape
+- Injected `--settings data/claude-local-model-settings.json` into all local-model spawn paths; added `--local-model-settings-path` CLI override
+- Added `ALLMIND_LOCAL_MODEL=1` env var injection alongside `ANTHROPIC_BASE_URL` on local model spawns
+
+## 2026-05
+
+### 2026-05-16 — Pin Codex default model to gpt-5.4 in buildCodexArgs
+
+- **Why:** Codex CLI's built-in default (gpt-5.5 as of 2026-05-15) is rejected by the installed binary with "requires newer version of Codex". Every current AllMind caller passes `--model` explicitly, but a future caller omitting the flag would silently fail.
+- **Impact:** `buildCodexArgs` now always passes `--model` with `gpt-5.4` as the fallback default. Callers that supply their own model are unaffected.
+- **Evidence:** 1b43d8b
+
+### 2026-05-08 — Allow local-model openSession on Windows with shell-free toolset
+
+- **Why:** The Qg7 sandbox gate fires on shell tool invocations (not session init) when `ANTHROPIC_BASE_URL` points to a non-Anthropic endpoint. Throwing unconditionally blocked valid read/edit/refactor sessions.
+- **Impact:** `openSession()` with `useLocalModel` on win32 now uses an `allowedTools` override (Read, Edit, Write, Glob, Grep) and injects an append-system-prompt notice telling the model shell tools are unavailable and to redispatch headless if needed. Shell-needing work still routes through `run()` / headless.
+- **Evidence:** 6b21cfe
+
+### 2026-05-08 — Fixed local-model OAuth mode; dropped ANTHROPIC_AUTH_TOKEN and ANTHROPIC_MODEL
+
+- **Symptom:** Local-model Claude Code spawns were landing in API-billing mode or failing with the enterprise sandbox gate on Windows.
+- **Root cause:** Three stacked bugs: (1) `ANTHROPIC_AUTH_TOKEN=not-needed` flipped Claude into API-billing mode; (2) `ANTHROPIC_MODEL` env was set to flag-side names — ignored for selection on 2.1.132 but triggered API-billing banner; (3) interactive `openSession()` launcher.ps1 never received env strips because `sanitizeEnv()` only ran for `run()` and `openHeadlessSession()`.
+- **Fix:** `getLocalModelProfile()` drops `ANTHROPIC_AUTH_TOKEN` entirely. `sanitizeEnv()` strips `ANTHROPIC_MODEL` defensively. Both launcher.ps1 templates null `ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_MODEL` and set `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` + `CLAUDE_CODE_REMOTE=1`. Model selection moved to `--model` flag. Added launcher debug dump for future diagnosis.
+- **Prevention:** Never set `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_MODEL` env var on local-model spawns. Use `--model` flag for model selection.
+- **Evidence:** 48d7135
+
+### 2026-05-07 — Preserve CLAUDECODE and CLAUDE_CODE_ENTRYPOINT in local-model sanitizeEnv
+
+- **Why:** Sandbox gate may key off these env vars to determine the policy hierarchy. Stripping them unconditionally changed the env shape relative to a normal interactive CC session.
+- **Impact:** In the local-model branch of `sanitizeEnv()`, `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT` are preserved. Non-local-model paths continue to strip them as before.
+- **Evidence:** 8f3b6b9
+
+### 2026-05-07 — Inject --settings flag into local-model spawn paths
+
+- **Why:** Native Windows sandbox gate fired during ALLMIND-launched local-model dispatches; a dedicated settings file with Bash-deny + PowerShell tool config was needed.
+- **Impact:** `data/claude-local-model-settings.json` wired into `buildArgs()`, `openSession()`, and `openHeadlessSession()` when local-model mode is active via `--settings` flag. Added `--local-model-settings-path` CLI override. Test expectation updated to `127.0.0.1:8001` (current portproxy endpoint).
+- **Evidence:** d765b8f
 
 ## 2026-04
 

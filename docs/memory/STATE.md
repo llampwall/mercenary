@@ -4,13 +4,14 @@
 # State
 
 ## Current Objective
-Core implementation complete. Codex backend substantially implemented. Next: real CI, versioning workflow, Codex integration test coverage.
+Core implementation complete. Local-model feature substantially complete (OAuth fix, shell-free interactive mode). Next: real CI, versioning workflow, Codex integration test coverage.
 
 ## Active Work
 - Nothing in progress
 
 ## Blockers
 - CI is placeholder-only — reports green without running tests
+- openSession with local model + shell tools blocked by Qg7 sandbox gate on Windows; must route shell work through headless (`run()`)
 
 ## Next Actions
 - [ ] Replace placeholder CI with real test execution (Windows runner)
@@ -31,7 +32,7 @@ Core implementation complete. Codex backend substantially implemented. Next: rea
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-05-01
-Commits covered through: 022055d0e7749ec0b0cd2e6c02fe52cf018d97e2
+Last memory update: 2026-05-17
+Commits covered through: 1b43d8badeb9118ee703fafcf292c4e83b6ae92f
 
-<!-- chinvex:last-commit:022055d0e7749ec0b0cd2e6c02fe52cf018d97e2 -->
+<!-- chinvex:last-commit:1b43d8badeb9118ee703fafcf292c4e83b6ae92f -->

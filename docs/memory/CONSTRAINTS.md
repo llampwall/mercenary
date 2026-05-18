@@ -15,7 +15,7 @@
 ## Rules
 - Always set `--dangerously-skip-permissions` on every spawned claude process (updated 2026-02-25)
 - `--no-session-persistence` applies only to one-shot `-p` launches; do NOT pass it to `openSession()` interactive sessions (updated 2026-02-25)
-- Always delete `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY` from child env
+- Always delete `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY` from child env — exception: in local-model branch, `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT` are PRESERVED to match the env shape of an interactive CC session (updated 2026-05-08)
 - Force `SHELL=pwsh` in `sanitizeEnv()` and in `openSession()` launcher to prevent PM2-inherited bash.exe (updated 2026-02-25)
 - Use `shell: false` with resolved claude binary path — never rely on shell PATH lookup
 - `pipeline` role uses `--strict-mcp-config` only; no `mcp-none.json` fallback injected (global mcpServers is empty) (updated 2026-02-26)
@@ -36,6 +36,13 @@
 - All spawn paths (`run()`, `openSession()`, `openHeadlessSession()`) warn to stderr when `purpose` or `origin` are not provided — callers must supply both for traceability (added 2026-03-21)
 - `appendSystemPrompt` content >8K chars must be written to a temp file; use `--append-system-prompt-file <path>` (or `--system-prompt-file`) instead of inline flag to avoid Windows ENAMETOOLONG / CLI arg truncation — applies to ALL spawn paths (`run()`, `openSession()`, `openHeadlessSession()`); never load temp file content back into a PowerShell variable and expand inline (updated 2026-04-28)
 - When `useLocalModel` is set on a spawn, `ANTHROPIC_BASE_URL` and `ALLMIND_LOCAL_MODEL=1` are both injected into the child env; other spawns are unaffected (updated 2026-04-30)
+- Never set `ANTHROPIC_AUTH_TOKEN` on local-model spawns — flips Claude into API-billing mode which trips the enterprise sandbox gate on Windows (added 2026-05-08)
+- Never set `ANTHROPIC_MODEL` env var on local-model spawns — empirically ignored on 2.1.132 for model selection but triggers API-billing banner; use `--model` flag instead (added 2026-05-08)
+- `sanitizeEnv()` strips `ANTHROPIC_MODEL` defensively on all spawn paths (added 2026-05-08)
+- Both launcher.ps1 templates (run + openSession) must explicitly null `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_MODEL`, and set `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` + `CLAUDE_CODE_REMOTE=1` for local-model spawns (added 2026-05-08)
+- `data/claude-local-model-settings.json` is injected via `--settings` for all local-model spawn paths; `--local-model-settings-path` CLI flag overrides the default path (added 2026-05-08)
+- `openSession()` with `useLocalModel` on win32: shell tools are blocked by the Qg7 sandbox gate; uses allowedTools override (Read,Edit,Write,Glob,Grep) + append-system-prompt notice instead of throwing — shell-needing work must route through `run()` / headless (updated 2026-05-08)
+- `buildCodexArgs` always passes `--model` explicitly; never rely on the Codex CLI's built-in default — it changes between Codex versions and may be rejected by the installed binary with "requires newer version of Codex" (added 2026-05-16)
 
 ## Key Facts
 - CLI entry: `node mercenary.js --prompt "..." --timeout N`
@@ -53,8 +60,9 @@
 - `--resume <id>` option in `run()` — enables session continuity; strips `--no-session-persistence` and passes `--resume <id>` to claude CLI (updated 2026-03-05)
 - `--session-id <uuid>` option in `run()` / CLI — attaches to a named session; strips `--no-session-persistence` and passes `--session-id <uuid>` to claude CLI (added 2026-03-12)
 - Concept-to-files lookup table at `docs/sys/lookup.json` — check this before grep/glob searches (added 2026-04-17)
-- `useLocalModel: true` routes spawn through local LiteLLM proxy at `http://127.0.0.1:4000` by default; `localModelUrl` overrides the URL — available on `run()`, `openSession()`, `openHeadlessSession()`; also sets `ALLMIND_LOCAL_MODEL=1` in child env (updated 2026-04-30)
-- CLI flags `--use-local-model` / `--local-model-url <url>` accepted at CLI entry; snake_case and camelCase aliases both parsed (added 2026-04-30)
+- `useLocalModel: true` routes spawn through local LiteLLM proxy at `http://127.0.0.1:4000` by default; `localModelUrl` overrides the URL — available on `run()`, `openSession()`, `openHeadlessSession()`; also sets `ALLMIND_LOCAL_MODEL=1` in child env; injects `--settings data/claude-local-model-settings.json` (updated 2026-05-08)
+- CLI flags `--use-local-model` / `--local-model-url <url>` / `--local-model-settings-path <path>` accepted at CLI entry; snake_case and camelCase aliases both parsed (updated 2026-05-08)
+- `data/claude-local-model-settings.json`: defensive Bash-deny + force PowerShell tool config for local-model spawns (added 2026-05-08)
 
 ## Hazards
 - `--interactive` silently fails if `wt` or `pwsh` are not installed/discoverable on PATH
@@ -66,6 +74,10 @@
 - Passing `--no-session-persistence` to `openSession()` (interactive) crashes or misbehaves — only valid for `-p` one-shot mode (updated 2026-02-25)
 - Claude Code 2.1.88+ requires stdin input within ~3s when using stream-json pipe mode (`openHeadlessSession()`); failing to send stdin quickly enough causes a silent startup hang (added 2026-04-17)
 - PowerShell launcher: writing a prompt to a temp file then loading it back with `Get-Content` and expanding inline (`--flag $content`) defeats the purpose — PowerShell expands the variable into argv at CreateProcess(), hitting the Windows CLI length limit; always pass the file path via the `-file` flag variant (added 2026-04-28)
+- Local-model `openSession()` on win32: shell tool invocations (not init) trigger the Qg7 sandbox gate with non-Anthropic `ANTHROPIC_BASE_URL`; read/edit/refactor work is fine via allowedTools override, but shell-needing work must use `run()` / `openHeadlessSession()` until upstream Claude Code fixes the gate (added 2026-05-08)
+- `ANTHROPIC_AUTH_TOKEN=not-needed` (or any value) flips Claude Code into API-billing mode on Windows — the enterprise sandbox gate fires and the session fails; never set this env var for local-model spawns (added 2026-05-08)
+- `Read-Host` or any interactive pause in a generated launcher.ps1 blocks every `openSession()` dispatch — the terminal window waits for operator Enter and the session never progresses; never leave diagnostic pauses in launcher templates (added 2026-05-09)
+- Codex CLI's built-in default model (e.g. gpt-5.5 as of 2026-05-15) may be rejected by the installed binary with "requires newer version of Codex"; `buildCodexArgs` pins `gpt-5.4` as a known-good default and always passes `--model` (added 2026-05-16)
 
 ## Superseded
 - (Superseded 2026-02-26) MCP fallback config path `mcp-none.json` — global mcpServers is now empty, fallback removed (18c991f)
