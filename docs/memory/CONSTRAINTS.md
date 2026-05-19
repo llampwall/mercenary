@@ -78,6 +78,7 @@
 - `ANTHROPIC_AUTH_TOKEN=not-needed` (or any value) flips Claude Code into API-billing mode on Windows — the enterprise sandbox gate fires and the session fails; never set this env var for local-model spawns (added 2026-05-08)
 - `Read-Host` or any interactive pause in a generated launcher.ps1 blocks every `openSession()` dispatch — the terminal window waits for operator Enter and the session never progresses; never leave diagnostic pauses in launcher templates (added 2026-05-09)
 - Codex CLI's built-in default model (e.g. gpt-5.5 as of 2026-05-15) may be rejected by the installed binary with "requires newer version of Codex"; `buildCodexArgs` pins `gpt-5.4` as a known-good default and always passes `--model` (added 2026-05-16)
+- `.cmd` test helper scripts fail with EINVAL when spawned with `windowsHide: true` + `detached: true` on Windows; use `.js` helpers via `node` instead (added 2026-05-18)
 
 ## Superseded
 - (Superseded 2026-02-26) MCP fallback config path `mcp-none.json` — global mcpServers is now empty, fallback removed (18c991f)

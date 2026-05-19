@@ -4,14 +4,21 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Extended observability field assertions in integration tests (spawnMs, firstByteMs, promptBytes, concurrentAtStart, backend, model, role)
+- Added real-subprocess timeout test using codex backend + `CODEX_PATH=node.exe`; no MERCENARY_INTEGRATION flag required; avoids .cmd helpers (EINVAL on Windows windowsHide+detached)
 - Pinned Codex default model to `gpt-5.4` in `buildCodexArgs`; always passes `--model` to avoid Codex CLI default changes breaking callers that omit the flag
 - Fixed local-model openSession shell tool block: replaced unconditional throw with allowedTools override (Read/Edit/Write/Glob/Grep) + append-system-prompt notice; shell work still routes headless
 - Fixed local-model OAuth mode: dropped `ANTHROPIC_AUTH_TOKEN` (was flipping API-billing mode), stripped `ANTHROPIC_MODEL` env, moved model selection to `--model` flag; both launcher.ps1 templates null these vars
 - Preserved `CLAUDECODE`/`CLAUDE_CODE_ENTRYPOINT` in local-model `sanitizeEnv` branch to match interactive CC session env shape
 - Injected `--settings data/claude-local-model-settings.json` into all local-model spawn paths; added `--local-model-settings-path` CLI override
-- Added `ALLMIND_LOCAL_MODEL=1` env var injection alongside `ANTHROPIC_BASE_URL` on local model spawns
 
 ## 2026-05
+
+### 2026-05-18 — Assert observability fields in integration tests; add real-subprocess timeout test
+
+- **Why:** Observability fields (spawnMs, firstByteMs, promptBytes, concurrentAtStart, backend, model, role) were added in 64d469e but had no assertions verifying presence or correctness; timeout path had no test without mocking.
+- **Impact:** Integration test for 'one-shot captures stdout' now asserts all observability fields (presence + non-NaN). New standalone 'run() timeout path' test uses `CODEX_PATH=node.exe` with a temp `.js` helper that writes one byte then sleeps; `run()` kills it after 2s and asserts `killedReason==='timeout'`, `timedOut===true`, `firstByteMs` null-or-number. No `MERCENARY_INTEGRATION` flag required for the timeout test. `.cmd` helpers avoided due to EINVAL under windowsHide+detached on Windows.
+- **Evidence:** d4be6dc
 
 ### 2026-05-16 — Pin Codex default model to gpt-5.4 in buildCodexArgs
 

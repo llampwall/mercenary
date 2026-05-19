@@ -4,7 +4,7 @@
 # State
 
 ## Current Objective
-Core implementation complete. Local-model feature substantially complete (OAuth fix, shell-free interactive mode). Next: real CI, versioning workflow, Codex integration test coverage.
+Core implementation complete. Local-model feature substantially complete (OAuth fix, shell-free interactive mode). Next: real CI, versioning workflow, remaining Codex integration test coverage.
 
 ## Active Work
 - Nothing in progress
@@ -32,7 +32,7 @@ Core implementation complete. Local-model feature substantially complete (OAuth 
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-05-18
-Commits covered through: 64d469edacd0bf157ed0dcf1c3c681c810d76422
+Last memory update: 2026-05-19
+Commits covered through: d4be6dcc03cf3db8eac66556b71e672c21fd6ae6
 
-<!-- chinvex:last-commit:64d469edacd0bf157ed0dcf1c3c681c810d76422 -->
+<!-- chinvex:last-commit:d4be6dcc03cf3db8eac66556b71e672c21fd6ae6 -->
