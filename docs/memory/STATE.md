@@ -33,6 +33,6 @@ Core implementation complete. Local-model feature substantially complete (OAuth 
 
 ---
 Last memory update: 2026-05-19
-Commits covered through: d4be6dcc03cf3db8eac66556b71e672c21fd6ae6
+Commits covered through: 012f3e2e2e21443ef54d331d2f5c30076e4ccc49
 
-<!-- chinvex:last-commit:d4be6dcc03cf3db8eac66556b71e672c21fd6ae6 -->
+<!-- chinvex:last-commit:012f3e2e2e21443ef54d331d2f5c30076e4ccc49 -->
