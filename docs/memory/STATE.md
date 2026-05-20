@@ -32,7 +32,7 @@ Core implementation complete. Local-model feature substantially complete (OAuth 
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-05-19
-Commits covered through: 012f3e2e2e21443ef54d331d2f5c30076e4ccc49
+Last memory update: 2026-05-20
+Commits covered through: ce13fd8839010ee1b8a7ab361db11e5de5a2a3e5
 
-<!-- chinvex:last-commit:012f3e2e2e21443ef54d331d2f5c30076e4ccc49 -->
+<!-- chinvex:last-commit:ce13fd8839010ee1b8a7ab361db11e5de5a2a3e5 -->
