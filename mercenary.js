@@ -25,12 +25,12 @@ const SAFE_CLI_CHARS = 20000;
 const DEFAULT_LOCAL_MODEL_URL = 'http://127.0.0.1:8001';
 const DEFAULT_LOCAL_MODEL_NAME = 'qwen3.6-27b-local';
 const DEFAULT_LOCAL_MODEL_TIMEOUT_MS = '900000';
-// Pin a known-good codex model. The CLI's own default ('gpt-5.5' as of
-// 2026-05-15) is rejected by the installed Codex CLI ("requires newer
-// version"). Every current AllMind caller passes its own --model; this
-// default protects future callers that omit it. See
+// Pin a known-good codex model. gpt-5.5 is confirmed working on Codex CLI
+// 0.133.0 (Phase 1 contract validation, 2026-06-03) — the prior note that it
+// "requires a newer version" was outdated. Every current AllMind caller passes
+// its own --model; this default protects future callers that omit it. See
 // docs/specs/usage-ledger.md "Known gotchas" and docs/specs/tier-and-trim.md.
-const DEFAULT_CODEX_MODEL = 'gpt-5.4';
+const DEFAULT_CODEX_MODEL = 'gpt-5.5';
 
 const LEDGER_PATH = join(import.meta.dirname, '.process-ledger.json');
 const LOCAL_MODEL_SETTINGS_PATH = join(import.meta.dirname, 'data', 'claude-local-model-settings.json');
@@ -62,18 +62,24 @@ function resolveCodexNativeExecutable(candidatePath) {
   if (!/(^|\\)codex(\.cmd|\.bat)?$/.test(normalized)) return null;
 
   const shimDir = dirname(candidatePath);
-  const vendorCandidates = [
-    join(
-      shimDir,
-      'node_modules', '@openai', 'codex', 'node_modules', '@openai',
-      'codex-win32-x64', 'vendor', 'x86_64-pc-windows-msvc', 'codex', 'codex.exe'
-    ),
-    join(
-      shimDir,
-      'node_modules', '@openai', 'codex', 'node_modules', '@openai',
-      'codex-win32-arm64', 'vendor', 'aarch64-pc-windows-msvc', 'codex', 'codex.exe'
-    ),
+  // The native exe moved from vendor/<triple>/codex/codex.exe to
+  // vendor/<triple>/bin/codex.exe in newer Codex releases. Probe both layouts
+  // (bin first — current) so a version bump that relocates the binary can't
+  // silently break resolution and drop us back to the unspawnable .cmd shim.
+  const vendorTriples = [
+    ['codex-win32-x64', 'x86_64-pc-windows-msvc'],
+    ['codex-win32-arm64', 'aarch64-pc-windows-msvc'],
   ];
+  const vendorCandidates = [];
+  for (const [pkg, triple] of vendorTriples) {
+    for (const subdir of ['bin', 'codex']) {
+      vendorCandidates.push(join(
+        shimDir,
+        'node_modules', '@openai', 'codex', 'node_modules', '@openai',
+        pkg, 'vendor', triple, subdir, 'codex.exe'
+      ));
+    }
+  }
 
   for (const vendorPath of vendorCandidates) {
     if (existsSync(vendorPath)) return vendorPath;
