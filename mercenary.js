@@ -255,6 +255,9 @@ function sanitizeEnvCodex(opts = {}) {
   delete env.CLAUDE_CODE_MAX_OUTPUT_TOKENS;
   env.SHELL = 'C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe';
   // CODEX_API_KEY and OPENAI_API_KEY are preserved — codex needs them
+  // Caller-supplied env (e.g. ALLMIND_THREAD_ID for the codex MCP child to
+  // attribute dispatches to the right Mind thread) merges last so it wins.
+  if (opts.env && typeof opts.env === 'object') Object.assign(env, opts.env);
   return env;
 }
 
