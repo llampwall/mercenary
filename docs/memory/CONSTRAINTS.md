@@ -43,6 +43,7 @@
 - `data/claude-local-model-settings.json` is injected via `--settings` for all local-model spawn paths; `--local-model-settings-path` CLI flag overrides the default path (added 2026-05-08)
 - `openSession()` with `useLocalModel` on win32: shell tools are blocked by the Qg7 sandbox gate; uses allowedTools override (Read,Edit,Write,Glob,Grep) + append-system-prompt notice instead of throwing — shell-needing work must route through `run()` / headless (updated 2026-05-08)
 - `buildCodexArgs` always passes `--model` explicitly; never rely on the Codex CLI's built-in default — it changes between Codex versions and may be rejected with "requires newer version of Codex"; pinned default is `gpt-5.5` (confirmed on Codex CLI 0.133.0) (updated 2026-06-04)
+- Codex spawns must use `detached: false` (`detached: backend !== 'codex'`) — `windowsHide` is silently dropped by node when `detached: true` on win32 (node#21825), causing codex's child tree (pwsh, git.exe, conhost) to inherit a visible console and pop windows (added 2026-06-05)
 
 ## Key Facts
 - CLI entry: `node mercenary.js --prompt "..." --timeout N`
@@ -79,6 +80,7 @@
 - `Read-Host` or any interactive pause in a generated launcher.ps1 blocks every `openSession()` dispatch — the terminal window waits for operator Enter and the session never progresses; never leave diagnostic pauses in launcher templates (added 2026-05-09)
 - Codex CLI's built-in default model changes between versions; `buildCodexArgs` pins `gpt-5.5` (confirmed on Codex CLI 0.133.0) and always passes `--model` — if a future release rejects this, bump `DEFAULT_CODEX_MODEL` and validate before deploying (updated 2026-06-04)
 - `.cmd` test helper scripts fail with EINVAL when spawned with `windowsHide: true` + `detached: true` on Windows; use `.js` helpers via `node` instead (added 2026-05-18)
+- On win32, `windowsHide` is silently dropped when `detached: true` (node#21825) — codex spawns must use `detached: false` so `windowsHide: true` is honored and codex gets a hidden console; treeKill still works via `taskkill /T /F /PID` (added 2026-06-05)
 
 ## Superseded
 - (Superseded 2026-02-26) MCP fallback config path `mcp-none.json` — global mcpServers is now empty, fallback removed (18c991f)

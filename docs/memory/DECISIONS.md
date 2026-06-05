@@ -4,12 +4,20 @@
 # Decisions
 
 ## Recent (last 30 days)
-- Fixed Codex Phase 1 blockers: `resolveCodexNativeExecutable()` now probes both `bin/codex.exe` (current) and `codex/codex.exe` (legacy) layouts; bumped `DEFAULT_CODEX_MODEL` from gpt-5.4 to gpt-5.5 (confirmed on 0.133.0)
+- Fixed Codex child window cascade: `detached: backend !== 'codex'` — node#21825 drops `windowsHide` when `detached: true` on win32; removing detached for codex gives it a hidden console its whole child tree rides silently
+- Fixed Codex Phase 1 blockers: `resolveCodexNativeExecutable()` now probes both `bin/codex.exe` (current) and `codex/codex.exe` (legacy) layouts; bumped `DEFAULT_CODEX_MODEL` to gpt-5.5 (confirmed on 0.133.0)
 - Extended observability field assertions in integration tests (spawnMs, firstByteMs, promptBytes, concurrentAtStart, backend, model, role)
 - Added real-subprocess timeout test using codex backend + `CODEX_PATH=node.exe`; no MERCENARY_INTEGRATION flag required; avoids .cmd helpers (EINVAL on Windows windowsHide+detached)
-- Pinned Codex default model to `gpt-5.4` in `buildCodexArgs`; always passes `--model` to avoid Codex CLI default changes breaking callers that omit the flag
 
 ## 2026-06
+
+### 2026-06-05 — Fixed Codex child window cascade via hidden console
+
+- **Symptom:** Every codex turn on Windows spawned a cascade of visible terminal windows (pwsh AST/shell helper, git.exe, conhost).
+- **Root cause:** node#21825 silently drops `windowsHide: true` when `detached: true` on win32. A detached codex process gets a fresh VISIBLE console, and all its children (shell helpers, git, conhost) inherit that visible console.
+- **Fix:** `detached: backend !== 'codex'` — codex spawns drop `detached: true` so `windowsHide: true` is honored and codex gets a hidden (CREATE_NO_WINDOW) console that its entire child tree rides silently. Claude keeps `detached: true` (its flashing is a separate ConPTY shim issue). `treeKill` is unaffected — it uses `taskkill /T /F` by PID, not the process group.
+- **Prevention:** Never use `detached: true` for codex on win32. If adding a new backend that spawns child processes, test with `windowsHide: true` + `detached: true` and verify no visible windows appear.
+- **Evidence:** 8cbaddc
 
 ### 2026-06-04 — Fixed Codex Phase 1 blockers: native exe dual-path probe + model default bump
 
