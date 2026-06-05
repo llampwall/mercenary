@@ -28,7 +28,7 @@
 - `--session-id <uuid>` strips `--no-session-persistence` and passes `--session-id <uuid>` to claude CLI; same session-persistence pattern as `--resume` (added 2026-03-12)
 - Use `appendSystemPrompt`/`--append-system-prompt` for persona injection; only use `--system-prompt` when the full default system prompt must be replaced (updated 2026-03-05)
 - Codex one-shot defaults: `--dangerously-bypass-approvals-and-sandbox --ephemeral` unless `sandbox` is explicitly provided (added 2026-03-08)
-- On Windows, `resolveCodexPath()` attempts to resolve the native `.exe` via `resolveCodexNativeExecutable()` before falling back to the `.cmd` shim — never spawn the `.cmd` shim when `.exe` is available (added 2026-03-07)
+- On Windows, `resolveCodexPath()` attempts to resolve the native `.exe` via `resolveCodexNativeExecutable()` before falling back to the `.cmd` shim — never spawn the `.cmd` shim when `.exe` is available; `resolveCodexNativeExecutable()` probes both `vendor/<triple>/bin/codex.exe` (current layout) and `vendor/<triple>/codex/codex.exe` (legacy layout) (updated 2026-06-04)
 - `shouldDisableCodexMcp(opts, mode)` controls per-run MCP disable for Codex: pipeline/streaming/allmind one-shot default to disabled; coordinator/allmind interactive default to disabled; explicit `opts.disableMcp` overrides all (added 2026-03-07)
 - `getDefaultCodexSandbox(opts, mode)` sets sandbox default: pipeline/streaming one-shot → `workspace-write`; coordinator interactive → `workspace-write`; others → none (added 2026-03-07)
 - `repo-agent` role is a pipeline alias: identical behavior (stream-json, `--strict-mcp-config`, MCP disabled, `workspace-write` sandbox for Codex) (added 2026-03-11)
@@ -42,7 +42,7 @@
 - Both launcher.ps1 templates (run + openSession) must explicitly null `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_MODEL`, and set `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` + `CLAUDE_CODE_REMOTE=1` for local-model spawns (added 2026-05-08)
 - `data/claude-local-model-settings.json` is injected via `--settings` for all local-model spawn paths; `--local-model-settings-path` CLI flag overrides the default path (added 2026-05-08)
 - `openSession()` with `useLocalModel` on win32: shell tools are blocked by the Qg7 sandbox gate; uses allowedTools override (Read,Edit,Write,Glob,Grep) + append-system-prompt notice instead of throwing — shell-needing work must route through `run()` / headless (updated 2026-05-08)
-- `buildCodexArgs` always passes `--model` explicitly; never rely on the Codex CLI's built-in default — it changes between Codex versions and may be rejected by the installed binary with "requires newer version of Codex" (added 2026-05-16)
+- `buildCodexArgs` always passes `--model` explicitly; never rely on the Codex CLI's built-in default — it changes between Codex versions and may be rejected with "requires newer version of Codex"; pinned default is `gpt-5.5` (confirmed on Codex CLI 0.133.0) (updated 2026-06-04)
 
 ## Key Facts
 - CLI entry: `node mercenary.js --prompt "..." --timeout N`
@@ -77,7 +77,7 @@
 - Local-model `openSession()` on win32: shell tool invocations (not init) trigger the Qg7 sandbox gate with non-Anthropic `ANTHROPIC_BASE_URL`; read/edit/refactor work is fine via allowedTools override, but shell-needing work must use `run()` / `openHeadlessSession()` until upstream Claude Code fixes the gate (added 2026-05-08)
 - `ANTHROPIC_AUTH_TOKEN=not-needed` (or any value) flips Claude Code into API-billing mode on Windows — the enterprise sandbox gate fires and the session fails; never set this env var for local-model spawns (added 2026-05-08)
 - `Read-Host` or any interactive pause in a generated launcher.ps1 blocks every `openSession()` dispatch — the terminal window waits for operator Enter and the session never progresses; never leave diagnostic pauses in launcher templates (added 2026-05-09)
-- Codex CLI's built-in default model (e.g. gpt-5.5 as of 2026-05-15) may be rejected by the installed binary with "requires newer version of Codex"; `buildCodexArgs` pins `gpt-5.4` as a known-good default and always passes `--model` (added 2026-05-16)
+- Codex CLI's built-in default model changes between versions; `buildCodexArgs` pins `gpt-5.5` (confirmed on Codex CLI 0.133.0) and always passes `--model` — if a future release rejects this, bump `DEFAULT_CODEX_MODEL` and validate before deploying (updated 2026-06-04)
 - `.cmd` test helper scripts fail with EINVAL when spawned with `windowsHide: true` + `detached: true` on Windows; use `.js` helpers via `node` instead (added 2026-05-18)
 
 ## Superseded

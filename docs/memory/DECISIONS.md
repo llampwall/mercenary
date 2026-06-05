@@ -4,13 +4,20 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Fixed Codex Phase 1 blockers: `resolveCodexNativeExecutable()` now probes both `bin/codex.exe` (current) and `codex/codex.exe` (legacy) layouts; bumped `DEFAULT_CODEX_MODEL` from gpt-5.4 to gpt-5.5 (confirmed on 0.133.0)
 - Extended observability field assertions in integration tests (spawnMs, firstByteMs, promptBytes, concurrentAtStart, backend, model, role)
 - Added real-subprocess timeout test using codex backend + `CODEX_PATH=node.exe`; no MERCENARY_INTEGRATION flag required; avoids .cmd helpers (EINVAL on Windows windowsHide+detached)
 - Pinned Codex default model to `gpt-5.4` in `buildCodexArgs`; always passes `--model` to avoid Codex CLI default changes breaking callers that omit the flag
-- Fixed local-model openSession shell tool block: replaced unconditional throw with allowedTools override (Read/Edit/Write/Glob/Grep) + append-system-prompt notice; shell work still routes headless
-- Fixed local-model OAuth mode: dropped `ANTHROPIC_AUTH_TOKEN` (was flipping API-billing mode), stripped `ANTHROPIC_MODEL` env, moved model selection to `--model` flag; both launcher.ps1 templates null these vars
-- Preserved `CLAUDECODE`/`CLAUDE_CODE_ENTRYPOINT` in local-model `sanitizeEnv` branch to match interactive CC session env shape
-- Injected `--settings data/claude-local-model-settings.json` into all local-model spawn paths; added `--local-model-settings-path` CLI override
+
+## 2026-06
+
+### 2026-06-04 — Fixed Codex Phase 1 blockers: native exe dual-path probe + model default bump
+
+- **Symptom:** All `backend: 'codex'` calls threw EINVAL; contract-validation report flagged two regressions in Phase 1.
+- **Root cause:** (1) `resolveCodexNativeExecutable()` hardcoded the `vendor/<triple>/codex/codex.exe` path; newer Codex releases moved the binary to `vendor/<triple>/bin/codex.exe`, causing `null` resolution and fallback to the `.cmd` shim, which throws EINVAL under `shell: false`. (2) `DEFAULT_CODEX_MODEL` was `gpt-5.4` but Codex CLI 0.133.0 ships `gpt-5.5` as its default; the "requires newer version" comment was outdated.
+- **Fix:** `resolveCodexNativeExecutable()` now probes both `bin/codex.exe` (current layout) and `codex/codex.exe` (legacy layout). `DEFAULT_CODEX_MODEL` bumped to `gpt-5.5`, confirmed working on 0.133.0.
+- **Prevention:** When Codex CLI version is bumped, verify both the exe path layout and the default model name before deploying. Hazard entry in CONSTRAINTS updated.
+- **Evidence:** 9be56fd
 
 ## 2026-05
 

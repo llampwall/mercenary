@@ -4,7 +4,7 @@
 # State
 
 ## Current Objective
-Core implementation complete. Local-model feature substantially complete (OAuth fix, shell-free interactive mode). Next: real CI, versioning workflow, remaining Codex integration test coverage.
+Core implementation complete. Local-model feature complete. Codex Phase 1 blockers resolved (native exe dual-path probe + model default bump to gpt-5.5). Next: real CI, versioning workflow, remaining Codex integration test coverage.
 
 ## Active Work
 - Nothing in progress
@@ -32,7 +32,7 @@ Core implementation complete. Local-model feature substantially complete (OAuth 
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-05-20
-Commits covered through: ce13fd8839010ee1b8a7ab361db11e5de5a2a3e5
+Last memory update: 2026-06-04
+Commits covered through: 9be56fd175051569010b966baefc43156d9aa3a4
 
-<!-- chinvex:last-commit:ce13fd8839010ee1b8a7ab361db11e5de5a2a3e5 -->
+<!-- chinvex:last-commit:9be56fd175051569010b966baefc43156d9aa3a4 -->
