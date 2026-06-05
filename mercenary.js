@@ -694,11 +694,20 @@ function run(opts = {}) {
       concurrentAtStart = Object.values(snap.entries).filter(e => e.status === 'alive').length;
     } catch { /* ledger read failure is non-fatal */ }
 
+    // node#21825: windowsHide is silently dropped when detached:true on win32,
+    // so a detached codex gets a fresh VISIBLE console and every child it spawns
+    // (the pwsh AST/shell helper, git.exe, conhost) inherits that visible console
+    // -> the terminal-popup cascade. Visual A/B de-risk (2026-06-05) confirmed
+    // codex's children INHERIT the parent's console: drop detached for codex so
+    // windowsHide:true is honored (CREATE_NO_WINDOW), codex gets a HIDDEN console,
+    // and its whole child tree rides it silently. treeKill uses taskkill /T /F by
+    // PID (not the process group), so it still tears the tree down. Claude keeps
+    // detached:true — its -p flashing is a separate problem (ConPTY shim).
     const proc = spawn(binaryPath, spawnArgs, {
       cwd: opts.cwd || process.cwd(),
       shell: false,
       windowsHide: true,
-      detached: true,
+      detached: backend !== 'codex',
       stdio: [useStdinForPrompt ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       env
     });
