@@ -32,6 +32,9 @@ coverage/
 .process-ledger.json
 .process-ledger.json.tmp
 
+# spawn timing log (runtime state, never committed)
+mercenary-timing.jsonl
+
 # chinvex runtime state
 .chinvex-status.json
 
