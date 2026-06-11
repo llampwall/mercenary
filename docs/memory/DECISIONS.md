@@ -4,12 +4,26 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Added `qwen` backend alias: `normalizeBackend()` rewrites `backend:'qwen'` → claude + `useLocalModel:true` at run()/openSession()/openHeadlessSession() entry; claude-tier model strings dropped (resolve to `DEFAULT_LOCAL_MODEL_NAME`), explicit local ids kept — lets AllMind's backend-routing.json express qwen as pure config
+- Added `opts.env` passthrough to codex spawn path (`sanitizeEnvCodex`): caller-supplied env merges last (caller wins); AllMind uses this for `ALLMIND_THREAD_ID` on codex dispatches
 - Fixed Codex child window cascade: `detached: backend !== 'codex'` — node#21825 drops `windowsHide` when `detached: true` on win32; removing detached for codex gives it a hidden console its whole child tree rides silently
 - Fixed Codex Phase 1 blockers: `resolveCodexNativeExecutable()` now probes both `bin/codex.exe` (current) and `codex/codex.exe` (legacy) layouts; bumped `DEFAULT_CODEX_MODEL` to gpt-5.5 (confirmed on 0.133.0)
 - Extended observability field assertions in integration tests (spawnMs, firstByteMs, promptBytes, concurrentAtStart, backend, model, role)
 - Added real-subprocess timeout test using codex backend + `CODEX_PATH=node.exe`; no MERCENARY_INTEGRATION flag required; avoids .cmd helpers (EINVAL on Windows windowsHide+detached)
 
 ## 2026-06
+
+### 2026-06-11 — Added 'qwen' backend alias for local-model spawns
+
+- **Why:** AllMind's June-15 migration needs `config/backend-routing.json` to express a third backend value (local Qwen on Kevin's 5090) without teaching ~25 callsites the local-model flag mechanics. The runtime path (claude CLI + ANTHROPIC_BASE_URL override) was already proven; only the vocabulary was missing — AllMind's `resolveBackend()` coerced anything ≠ 'codex' to 'claude'.
+- **Impact:** `normalizeBackend()` rewrites `backend:'qwen'` to `backend:'claude'` + `useLocalModel:true` at the entry of `run()`, `openSession()`, and `openHeadlessSession()`. Claude-tier model strings (opus/sonnet/haiku/claude-*) are dropped so spawns resolve to `DEFAULT_LOCAL_MODEL_NAME`; explicit local model ids pass through. Paired change in AllMind `lib/backend-routing.js` passes 'qwen' through.
+- **Evidence:** ecfd7e6
+
+### 2026-06-05 — Added opts.env passthrough to codex spawn path
+
+- **Why:** AllMind's codex Mind dispatch path needed to inject `ALLMIND_THREAD_ID` into the spawned MCP child so dispatches attribute to the originating thread rather than inheriting the PM2 server env where the var is unset. Mirrors the existing `childEnv` wiring on the claude spawn path.
+- **Impact:** `sanitizeEnvCodex` now accepts `opts.env`; any keys supplied by the caller are merged last (caller wins over base sanitized env). All codex spawn paths (`run()`, etc.) forward `opts.env`.
+- **Evidence:** 22948d4
 
 ### 2026-06-05 — Fixed Codex child window cascade via hidden console
 

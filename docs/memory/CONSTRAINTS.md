@@ -46,6 +46,7 @@
 - Codex spawns must use `detached: false` (`detached: backend !== 'codex'`) — `windowsHide` is silently dropped by node when `detached: true` on win32 (node#21825), causing codex's child tree (pwsh, git.exe, conhost) to inherit a visible console and pop windows (added 2026-06-05)
 
 ## Key Facts
+- `opts.env` — caller-supplied env map; merges last (caller wins over base sanitized env) in all spawn paths including codex (`sanitizeEnvCodex`); used by AllMind to inject `ALLMIND_THREAD_ID` on codex spawns (added 2026-06-05)
 - CLI entry: `node mercenary.js --prompt "..." --timeout N`
 - Interactive entry: `node mercenary.js --interactive`
 - Test command: `node test/mercenary.test.js`

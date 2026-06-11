@@ -4,17 +4,16 @@
 # State
 
 ## Current Objective
-Core implementation complete. Codex Phase 1 blockers resolved (hidden console cascade, native exe dual-path probe, model default gpt-5.5). Next: real CI, versioning workflow, remaining Codex integration test coverage.
+Core implementation complete. Codex Phase 1 blockers resolved. Next: real CI, versioning workflow, remaining Codex integration test coverage.
 
 ## Active Work
-- Uncommitted `mercenary.js`: adds `opts.env` passthrough so callers can merge arbitrary env vars into spawned processes (wins over base env)
+- None — all recent work committed
 
 ## Blockers
 - CI is placeholder-only — reports green without running tests
 - openSession with local model + shell tools blocked by Qg7 sandbox gate on Windows; must route shell work through headless (`run()`)
 
 ## Next Actions
-- [ ] Commit `opts.env` passthrough (uncommitted change in `mercenary.js`)
 - [ ] Replace placeholder CI with real test execution (Windows runner)
 - [ ] Define release/versioning workflow for `mercenary` CLI distribution
 - [ ] Add integration tests for Codex backend (MCP disable, sandbox defaults, native exe)
@@ -25,7 +24,7 @@ Core implementation complete. Codex Phase 1 blockers resolved (hidden console ca
 - Test: `node test/mercenary.test.js`
 - Codex run: `node mercenary.js --prompt "test" --backend codex --timeout 10`
 - Interactive: `node mercenary.js --interactive`
-- Local model: `node mercenary.js --use-local-model --prompt "test"`
+- Local model: `node mercenary.js --use-local-model --prompt "test"` (or `--backend qwen`)
 - Entry point: `mercenary.js`
 
 ## Out of Scope (for now)
@@ -33,7 +32,7 @@ Core implementation complete. Codex Phase 1 blockers resolved (hidden console ca
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-06-05
-Commits covered through: aba9359b2227e74819b27bcc5948af65ed7ba47e
+Last memory update: 2026-06-11
+Commits covered through: ecfd7e6d6b9c271752b77d1847e90726bf266884
 
-<!-- chinvex:last-commit:aba9359b2227e74819b27bcc5948af65ed7ba47e -->
+<!-- chinvex:last-commit:ecfd7e6d6b9c271752b77d1847e90726bf266884 -->
