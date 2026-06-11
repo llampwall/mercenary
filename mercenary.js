@@ -191,6 +191,23 @@ function isLocalModelEnabled(opts = {}) {
   );
 }
 
+// backend: 'qwen' is an alias for the claude CLI pointed at the local Qwen
+// endpoint (ANTHROPIC_BASE_URL override via the local-model profile above).
+// It lets routing configs (e.g. AllMind config/backend-routing.json) express a
+// third backend value without callers knowing the local-model flag mechanics.
+// A claude-tier model string (haiku/sonnet/opus/claude-*) from the caller is
+// meaningless on the local endpoint and is dropped, so model resolution falls
+// through to localModelName/DEFAULT_LOCAL_MODEL_NAME. Any other model string
+// (an explicit local model id) is kept.
+function normalizeBackend(opts = {}) {
+  if (opts.backend !== 'qwen') return opts;
+  const next = { ...opts, backend: 'claude', useLocalModel: true };
+  if (typeof next.model === 'string' && /^(opus|sonnet|haiku|claude-)/i.test(next.model)) {
+    delete next.model;
+  }
+  return next;
+}
+
 // No ANTHROPIC_AUTH_TOKEN — leaving it unset keeps Claude Code in OAuth/subscription mode.
 // Setting it (even to a placeholder) flips Claude into API-billing mode, which on native
 // Windows triggers the enterprise sandbox gate and blocks all shell tool calls. The OAuth
@@ -655,6 +672,7 @@ function warnMissingProvenance(opts, label) {
 // --- One-shot Mode ---
 
 function run(opts = {}) {
+  opts = normalizeBackend(opts);
   warnMissingProvenance(opts, 'run');
   return new Promise((resolve, reject) => {
     if (!opts.prompt) return reject(new Error('prompt is required'));
@@ -903,6 +921,7 @@ async function openSessionCodex(opts, title, tmpBase) {
 }
 
 async function openSession(opts = {}) {
+  opts = normalizeBackend(opts);
   warnMissingProvenance(opts, 'openSession');
   const backend = opts.backend || 'claude';
   const title = opts.title || 'Mercenary';
@@ -1122,6 +1141,7 @@ async function openSession(opts = {}) {
  * @returns {Promise<{send: Function, close: Function, pid: number, closed: boolean, turnCount: number}>}
  */
 async function openHeadlessSession(opts = {}) {
+  opts = normalizeBackend(opts);
   warnMissingProvenance(opts, 'openHeadlessSession');
   const claudePath = resolveClaudePath();
   const env = sanitizeEnv(opts);
@@ -1513,8 +1533,8 @@ async function main() {
   }
 
   // No mode specified
-  console.error('Usage: mercenary --prompt <text> [--backend claude|codex] [--timeout <s>] [--json]');
-  console.error('       mercenary --interactive [--backend claude|codex] [--system-prompt <path>]');
+  console.error('Usage: mercenary --prompt <text> [--backend claude|codex|qwen] [--timeout <s>] [--json]');
+  console.error('       mercenary --interactive [--backend claude|codex|qwen] [--system-prompt <path>]');
   console.error('       mercenary --kill <pid>');
   console.error('       mercenary --ps              Show all tracked processes with status and memory');
   console.error('       mercenary --audit           Scan, discover orphans, update ledger metrics');
@@ -1531,7 +1551,7 @@ if (resolve(process.argv[1]) === resolve(import.meta.filename)) {
 }
 
 export {
-  run, openSession, openHeadlessSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnv, sanitizeEnvCodex, buildCodexArgs, parseArgs,
+  run, openSession, openHeadlessSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnv, sanitizeEnvCodex, buildCodexArgs, parseArgs, normalizeBackend,
   ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, ledgerPurge,
   checkPidAlive, discoverProcesses, readLedger, writeLedger, LEDGER_PATH,
 };

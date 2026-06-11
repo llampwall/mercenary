@@ -67,7 +67,7 @@ node mercenary.js --kill 12345
 |---|---|---|
 | `--prompt <text>` | string | Run one-shot with this prompt _(required for one-shot mode)_ |
 | `--interactive` | boolean | Open an interactive terminal session |
-| `--backend <name>` | string | `claude` (default) or `codex` |
+| `--backend <name>` | string | `claude` (default), `codex`, or `qwen` (alias: claude CLI → local Qwen endpoint) |
 | `--timeout <s>` | number | Kill after N seconds; exit code 124 on timeout |
 | `--json` | boolean | Print result as JSON to stdout and always exit 0 |
 | `--model <id>` | string | Override model (e.g. `claude-opus-4-5`, `gpt-4o`) |
@@ -137,6 +137,14 @@ Wraps the [OpenAI Codex CLI](https://github.com/openai/codex).
 **MCP on codex:** Codex uses `~/.codex/config.toml` and `.codex/config.toml` for MCP server definitions. Mercenary does not own that system. The only Codex-side MCP control Mercenary currently provides is `disableMcp: true`, which discovers configured server names and injects per-run `mcp_servers.<name>.enabled=false` overrides. It does not provide Claude-style `mcpConfig` or `strictMcp` semantics for Codex.
 
 **AGENTS.md:** Codex reads `AGENTS.md` files as a persistent instruction layer before each task. Place project-specific instructions in `<project>/.codex/AGENTS.md` or global defaults in `~/.codex/AGENTS.md`. This is separate from `developer_instructions` (which mercenary injects via `--persona` / `--append-system-prompt`) and stacks on top of it.
+
+### `qwen` (alias)
+
+Not a third CLI — an alias for the `claude` backend pointed at the local Qwen endpoint. `normalizeBackend()` rewrites `backend: 'qwen'` to `backend: 'claude'` + `useLocalModel: true` at the entry of `run()`, `openSession()`, and `openHeadlessSession()`, so routing configs (e.g. AllMind's `config/backend-routing.json`) can express a third backend value without callers knowing the local-model flag mechanics.
+
+- Env: `ANTHROPIC_BASE_URL` → `http://127.0.0.1:8001` (override with `localModelUrl`), `--settings data/claude-local-model-settings.json`
+- Model: claude-tier model strings (`opus`/`sonnet`/`haiku`/`claude-*`) are dropped and resolve to `qwen3.6-27b-local` (override with `localModelName`); any other explicit model id is kept
+- All existing local-model options (`localModelUrl`, `localModelName`, `localModelTimeoutMs`, `localModelSettingsPath`) apply
 
 ---
 
