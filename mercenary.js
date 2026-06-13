@@ -636,6 +636,15 @@ function buildCodexArgs(opts, warn = (msg) => process.stderr.write(`mercenary: $
     }
   }
 
+  // Caller-supplied `-c` overrides (e.g. inject an MCP server cwd-independently).
+  // Each entry is a raw TOML key=value the codex CLI parses as a `--config` arg.
+  // shell:false here, so each string is one argv element — no quoting needed.
+  if (Array.isArray(opts.codexConfigOverrides)) {
+    for (const kv of opts.codexConfigOverrides) {
+      if (kv) args.push('--config', kv);
+    }
+  }
+
   // Persona + appendSystemPrompt combined as --config developer_instructions.
   // role: 'allmind' defaults to the AllMind persona path; caller can override with opts.persona.
   // File content is read and passed as plain text (no XML wrapper).
@@ -869,6 +878,15 @@ async function openSessionCodex(opts, title, tmpBase) {
   if (shouldDisableCodexMcp(opts, 'interactive')) {
     for (const name of collectCodexMcpServerNames(opts.cwd)) {
       codexArgs.push('--config', `mcp_servers.${name}.enabled=false`);
+    }
+  }
+  // Caller-supplied `-c` overrides (mirrors the one-shot path in buildCodexArgs).
+  // This launcher emits a PowerShell command string, so wrap each value in double
+  // quotes with embedded quotes backtick-escaped — codex then receives the raw
+  // TOML key=value (e.g. mcp_servers.allmind.args=["...js"]) intact.
+  if (Array.isArray(opts.codexConfigOverrides)) {
+    for (const kv of opts.codexConfigOverrides) {
+      if (kv) codexArgs.push('--config', `"${kv.replace(/"/g, '`"')}"`);
     }
   }
   if (opts.role === 'allmind') codexArgs.push('--config', 'personality=pragmatic');
