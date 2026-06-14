@@ -47,6 +47,7 @@
 
 ## Key Facts
 - `opts.env` — caller-supplied env map; merges last (caller wins over base sanitized env) in all spawn paths including codex (`sanitizeEnvCodex`); used by AllMind to inject `ALLMIND_THREAD_ID` on codex spawns (added 2026-06-05)
+- `opts.codexConfigOverrides` — array of raw TOML key=value strings forwarded as `codex --config <entry>` (one arg per entry, cwd-independent); one-shot passes as-is (`shell:false`); interactive launcher wraps each in PowerShell-safe quotes; AllMind uses this to inject MCP server tables for repo-scoped codex Mind turns (added 2026-06-13)
 - CLI entry: `node mercenary.js --prompt "..." --timeout N`
 - Interactive entry: `node mercenary.js --interactive`
 - Test command: `node test/mercenary.test.js`

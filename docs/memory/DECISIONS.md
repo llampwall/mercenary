@@ -4,6 +4,7 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Added `opts.codexConfigOverrides`: array of raw TOML key=value strings forwarded as `codex --config <entry>` per arg; cwd-independent; AllMind uses it to inject MCP server tables for repo-scoped codex Mind turns
 - Added `qwen` backend alias: `normalizeBackend()` rewrites `backend:'qwen'` → claude + `useLocalModel:true` at run()/openSession()/openHeadlessSession() entry; claude-tier model strings dropped (resolve to `DEFAULT_LOCAL_MODEL_NAME`), explicit local ids kept — lets AllMind's backend-routing.json express qwen as pure config
 - Added `opts.env` passthrough to codex spawn path (`sanitizeEnvCodex`): caller-supplied env merges last (caller wins); AllMind uses this for `ALLMIND_THREAD_ID` on codex dispatches
 - Fixed Codex child window cascade: `detached: backend !== 'codex'` — node#21825 drops `windowsHide` when `detached: true` on win32; removing detached for codex gives it a hidden console its whole child tree rides silently
@@ -12,6 +13,12 @@
 - Added real-subprocess timeout test using codex backend + `CODEX_PATH=node.exe`; no MERCENARY_INTEGRATION flag required; avoids .cmd helpers (EINVAL on Windows windowsHide+detached)
 
 ## 2026-06
+
+### 2026-06-13 — Added opts.codexConfigOverrides for cwd-independent Codex config injection
+
+- **Why:** Codex discovers config from `<cwd>/.codex/config.toml`; when AllMind dispatches a repo-scoped codex Mind turn with a different cwd, the MCP server table isn't picked up. Callers needed a spawn-time injection path independent of the cwd.
+- **Impact:** `buildCodexArgs` (one-shot) and the interactive codex launcher now append each `opts.codexConfigOverrides` entry as a `codex --config <entry>` arg. One-shot passes entries as-is (`shell:false`, one argv each); interactive launcher wraps each in PowerShell-safe quotes.
+- **Evidence:** d27d2239
 
 ### 2026-06-11 — Added 'qwen' backend alias for local-model spawns
 
