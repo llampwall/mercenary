@@ -993,6 +993,8 @@ async function openSession(opts = {}) {
     `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "${opts.maxTokens || 65536}"`,
     // Expose dispatch_id so the spawned session can include it in events
     ...(opts.dispatchId ? [`$env:ALLMIND_DISPATCH_ID = "${opts.dispatchId.replace(/"/g, '')}"`] : []),
+    // Bake any additional caller-supplied env vars (e.g. ALLMIND_ORIGIN_THREAD_ID, ALLMIND_THREAD_ID)
+    ...(opts.env ? Object.entries(opts.env).map(([k, v]) => `$env:${k} = "${escapePowerShellString(String(v))}"`) : []),
     // Route through a local Claude-compatible endpoint when caller opts in
     ...localModelEnvLines,
     ...(localModelProfile ? [`$env:ALLMIND_LOCAL_MODEL = "1"`] : []),
@@ -1105,10 +1107,12 @@ async function openSession(opts = {}) {
   // The dispatch_id is baked in at generation time; if not provided, skip the hook.
   if (opts.dispatchId) {
     const safeDispatchId = opts.dispatchId.replace(/"/g, '');
+    const safeThreadId = (opts.env?.ALLMIND_ORIGIN_THREAD_ID || '').replace(/"/g, '');
+    const threadPart = safeThreadId ? `,"thread_id":"${safeThreadId}"` : '';
     lines.push('');
     lines.push('# Exit hook — report session exit to AllMind');
     lines.push('try {');
-    lines.push(`  $exitBody = '{"event_type":"mercenary_session_exit","summary":"Session exited with code ' + $LASTEXITCODE + '","details":{"dispatch_id":"${safeDispatchId}","exit_code":' + $LASTEXITCODE + '}}'`);
+    lines.push(`  $exitBody = '{"event_type":"mercenary_session_exit","summary":"Session exited with code ' + $LASTEXITCODE + '","details":{"dispatch_id":"${safeDispatchId}","exit_code":' + $LASTEXITCODE + '${threadPart}}}'`);
     lines.push('  curl.exe -s -X POST http://localhost:7780/api/internal/event -H "Content-Type: application/json" -d $exitBody | Out-Null');
     lines.push('  Write-Host "[mercenary] Exit hook sent (code $LASTEXITCODE)" -ForegroundColor DarkGray');
     lines.push('} catch {');
