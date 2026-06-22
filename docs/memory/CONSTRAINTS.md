@@ -32,7 +32,7 @@
 - `shouldDisableCodexMcp(opts, mode)` controls per-run MCP disable for Codex: pipeline/streaming/allmind one-shot default to disabled; coordinator/allmind interactive default to disabled; explicit `opts.disableMcp` overrides all (added 2026-03-07)
 - `getDefaultCodexSandbox(opts, mode)` sets sandbox default: pipeline/streaming one-shot → `workspace-write`; coordinator interactive → `workspace-write`; others → none (added 2026-03-07)
 - `repo-agent` role is a pipeline alias: identical behavior (stream-json, `--strict-mcp-config`, MCP disabled, `workspace-write` sandbox for Codex) (added 2026-03-11)
-- When `dispatchId` is passed to `openSession()`, the launcher sets `$env:ALLMIND_DISPATCH_ID` in the child env and POSTs `mercenary_session_exit` to AllMind `/api/internal/event` after Claude exits (added 2026-03-18)
+- When `dispatchId` is passed to `openSession()`, the launcher sets `$env:ALLMIND_DISPATCH_ID` in the child env and POSTs `mercenary_session_exit` to AllMind `/api/internal/event` after Claude exits; exit hook POST body includes `thread_id` in details when spawned with an origin thread (updated 2026-06-21)
 - All spawn paths (`run()`, `openSession()`, `openHeadlessSession()`) warn to stderr when `purpose` or `origin` are not provided — callers must supply both for traceability (added 2026-03-21)
 - `appendSystemPrompt` content >8K chars must be written to a temp file; use `--append-system-prompt-file <path>` (or `--system-prompt-file`) instead of inline flag to avoid Windows ENAMETOOLONG / CLI arg truncation — applies to ALL spawn paths (`run()`, `openSession()`, `openHeadlessSession()`); never load temp file content back into a PowerShell variable and expand inline (updated 2026-04-28)
 - When `useLocalModel` is set on a spawn, `ANTHROPIC_BASE_URL` and `ALLMIND_LOCAL_MODEL=1` are both injected into the child env; other spawns are unaffected (updated 2026-04-30)
@@ -46,7 +46,7 @@
 - Codex spawns must use `detached: false` (`detached: backend !== 'codex'`) — `windowsHide` is silently dropped by node when `detached: true` on win32 (node#21825), causing codex's child tree (pwsh, git.exe, conhost) to inherit a visible console and pop windows (added 2026-06-05)
 
 ## Key Facts
-- `opts.env` — caller-supplied env map; merges last (caller wins over base sanitized env) in all spawn paths including codex (`sanitizeEnvCodex`); used by AllMind to inject `ALLMIND_THREAD_ID` on codex spawns (added 2026-06-05)
+- `opts.env` — caller-supplied env map; merges last (caller wins over base sanitized env) in all spawn paths including codex (`sanitizeEnvCodex`); all entries are also baked into the interactive launcher PS1 (`openSession`) as `$env:KEY = "value"` lines using `escapePowerShellString` — previously only `ALLMIND_DISPATCH_ID` was baked, all other opts.env vars were silently dropped; used by AllMind to inject `ALLMIND_THREAD_ID` / `ALLMIND_ORIGIN_THREAD_ID` (updated 2026-06-21)
 - `opts.codexConfigOverrides` — array of raw TOML key=value strings forwarded as `codex --config <entry>` (one arg per entry, cwd-independent); one-shot passes as-is (`shell:false`); interactive launcher wraps each in PowerShell-safe quotes; AllMind uses this to inject MCP server tables for repo-scoped codex Mind turns (added 2026-06-13)
 - CLI entry: `node mercenary.js --prompt "..." --timeout N`
 - Interactive entry: `node mercenary.js --interactive`

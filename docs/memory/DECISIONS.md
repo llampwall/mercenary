@@ -4,15 +4,21 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Baked all `opts.env` entries into the interactive launcher PS1; exit hook now includes `thread_id` in POST body when spawned with an origin thread — previously only ALLMIND_DISPATCH_ID was baked; other opts.env vars (e.g. ALLMIND_ORIGIN_THREAD_ID) were silently dropped
 - Added `opts.codexConfigOverrides`: array of raw TOML key=value strings forwarded as `codex --config <entry>` per arg; cwd-independent; AllMind uses it to inject MCP server tables for repo-scoped codex Mind turns
-- Added `qwen` backend alias: `normalizeBackend()` rewrites `backend:'qwen'` → claude + `useLocalModel:true` at run()/openSession()/openHeadlessSession() entry; claude-tier model strings dropped (resolve to `DEFAULT_LOCAL_MODEL_NAME`), explicit local ids kept — lets AllMind's backend-routing.json express qwen as pure config
+- Added `qwen` backend alias: `normalizeBackend()` rewrites `backend:'qwen'` → claude + `useLocalModel:true` at run()/openSession()/openHeadlessSession() entry; claude-tier model strings dropped (resolve to `DEFAULT_LOCAL_MODEL_NAME`), explicit local ids kept
 - Added `opts.env` passthrough to codex spawn path (`sanitizeEnvCodex`): caller-supplied env merges last (caller wins); AllMind uses this for `ALLMIND_THREAD_ID` on codex dispatches
-- Fixed Codex child window cascade: `detached: backend !== 'codex'` — node#21825 drops `windowsHide` when `detached: true` on win32; removing detached for codex gives it a hidden console its whole child tree rides silently
-- Fixed Codex Phase 1 blockers: `resolveCodexNativeExecutable()` now probes both `bin/codex.exe` (current) and `codex/codex.exe` (legacy) layouts; bumped `DEFAULT_CODEX_MODEL` to gpt-5.5 (confirmed on 0.133.0)
-- Extended observability field assertions in integration tests (spawnMs, firstByteMs, promptBytes, concurrentAtStart, backend, model, role)
-- Added real-subprocess timeout test using codex backend + `CODEX_PATH=node.exe`; no MERCENARY_INTEGRATION flag required; avoids .cmd helpers (EINVAL on Windows windowsHide+detached)
+- Fixed Codex child window cascade: `detached: backend !== 'codex'` — node#21825 drops `windowsHide` when `detached: true` on win32
+- Fixed Codex Phase 1 blockers: `resolveCodexNativeExecutable()` probes both `bin/codex.exe` (current) and `codex/codex.exe` (legacy); bumped `DEFAULT_CODEX_MODEL` to gpt-5.5
+- Extended observability field assertions in integration tests; added real-subprocess timeout test via `CODEX_PATH=node.exe`
 
 ## 2026-06
+
+### 2026-06-21 — Baked opts.env into interactive launcher; added thread_id to exit hook
+
+- **Why:** `openSession()` interactive launcher only baked `ALLMIND_DISPATCH_ID` explicitly; any other env vars in `opts.env` (e.g. `ALLMIND_ORIGIN_THREAD_ID`, `ALLMIND_THREAD_ID`) were silently dropped, leaving those vars empty inside the spawned session. The exit hook POST body also lacked `thread_id`, so `/api/internal/event` couldn't route completion to the originating Mind thread unless the agent voluntarily called a report endpoint.
+- **Impact:** All `opts.env` entries are now iterated and emitted as `$env:KEY = "value"` lines in the launcher PS1 using `escapePowerShellString`. Exit hook includes `"thread_id"` in the POST body details when the session was spawned with an origin thread.
+- **Evidence:** 4d549df
 
 ### 2026-06-13 — Added opts.codexConfigOverrides for cwd-independent Codex config injection
 
