@@ -33,6 +33,6 @@ Core implementation complete. Codex Phase 1 blockers resolved. Next: real CI, ve
 
 ---
 Last memory update: 2026-06-24
-Commits covered through: 80f0f3834de9936db86bb71892853386c22dad93
+Commits covered through: 0848e84aaf88ff091fca2a0f7f98e32abcfcd42b
 
-<!-- chinvex:last-commit:80f0f3834de9936db86bb71892853386c22dad93 -->
+<!-- chinvex:last-commit:0848e84aaf88ff091fca2a0f7f98e32abcfcd42b -->
