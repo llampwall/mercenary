@@ -32,7 +32,7 @@ Core implementation complete. Codex Phase 1 blockers resolved. Next: real CI, ve
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-06-26
-Commits covered through: adf3f9ea435c97224d2e623f3b064369eb7d3226
+Last memory update: 2026-06-27
+Commits covered through: 066356972c01b062126c607524f3f49dc8ebfb27
 
-<!-- chinvex:last-commit:adf3f9ea435c97224d2e623f3b064369eb7d3226 -->
+<!-- chinvex:last-commit:066356972c01b062126c607524f3f49dc8ebfb27 -->
