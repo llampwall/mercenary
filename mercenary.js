@@ -1100,6 +1100,32 @@ async function openSession(opts = {}) {
   lines.push('Write-Host ("  CLAUDECODE=" + $env:CLAUDECODE) -ForegroundColor Yellow');
   lines.push('Write-Host ("  CLAUDE_CODE_ENTRYPOINT=" + $env:CLAUDE_CODE_ENTRYPOINT) -ForegroundColor Yellow');
   lines.push('Write-Host "[mercenary][DEBUG] -------------" -ForegroundColor Yellow');
+
+  // Report the REAL claude.exe PID to the AllMind process ledger so liveness
+  // tracking follows the Claude process, not the wt.exe launcher. openSession
+  // returns proc.pid = the `wt -w 0 nt` client, which hands off to the existing
+  // Windows Terminal and exits within seconds — useless for liveness. claude.exe
+  // is launched just below as a direct child of THIS launcher pwsh, so a
+  // background job finds it and POSTs its PID to /api/internal/ledger/update-pid.
+  // Best-effort: on any failure the ledger keeps the launcher PID (prior behavior).
+  if (opts.dispatchId) {
+    const safeLedgerDispatchId = opts.dispatchId.replace(/"/g, '');
+    lines.push('# Phone the real claude.exe PID home to the AllMind ledger (best-effort)');
+    lines.push('$allmindLauncherPid = $PID');
+    lines.push('Start-Job -ScriptBlock {');
+    lines.push('  param($lpid)');
+    lines.push('  for ($i = 0; $i -lt 24; $i++) {');
+    lines.push('    Start-Sleep -Milliseconds 750');
+    lines.push('    try { $kid = Get-CimInstance Win32_Process -Filter "ParentProcessId=$lpid" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "claude*" } | Select-Object -First 1 } catch { $kid = $null }');
+    lines.push('    if ($kid) {');
+    lines.push(`      $body = '{"dispatch_id":"${safeLedgerDispatchId}","pid":' + $kid.ProcessId + '}'`);
+    lines.push('      try { curl.exe -s -X POST http://localhost:7780/api/internal/ledger/update-pid -H "Content-Type: application/json" -d $body | Out-Null } catch {}');
+    lines.push('      break');
+    lines.push('    }');
+    lines.push('  }');
+    lines.push('} -ArgumentList $allmindLauncherPid | Out-Null');
+  }
+
   lines.push(claudeArgs.join(' `\n  '));
   lines.push('Write-Host "[mercenary] Claude exited with code $LASTEXITCODE" -ForegroundColor DarkGray');
 
