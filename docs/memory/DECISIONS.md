@@ -4,15 +4,21 @@
 # Decisions
 
 ## Recent (last 30 days)
-- Baked all `opts.env` entries into the interactive launcher PS1; exit hook now includes `thread_id` in POST body when spawned with an origin thread — previously only ALLMIND_DISPATCH_ID was baked; other opts.env vars (e.g. ALLMIND_ORIGIN_THREAD_ID) were silently dropped
+- `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
+- Baked all `opts.env` entries into the interactive launcher PS1; exit hook now includes `thread_id` in POST body when spawned with an origin thread — previously only ALLMIND_DISPATCH_ID was baked
 - Added `opts.codexConfigOverrides`: array of raw TOML key=value strings forwarded as `codex --config <entry>` per arg; cwd-independent; AllMind uses it to inject MCP server tables for repo-scoped codex Mind turns
-- Added `qwen` backend alias: `normalizeBackend()` rewrites `backend:'qwen'` → claude + `useLocalModel:true` at run()/openSession()/openHeadlessSession() entry; claude-tier model strings dropped (resolve to `DEFAULT_LOCAL_MODEL_NAME`), explicit local ids kept
-- Added `opts.env` passthrough to codex spawn path (`sanitizeEnvCodex`): caller-supplied env merges last (caller wins); AllMind uses this for `ALLMIND_THREAD_ID` on codex dispatches
+- Added `qwen` backend alias: `normalizeBackend()` rewrites `backend:'qwen'` → claude + `useLocalModel:true`; claude-tier model strings dropped, explicit local ids kept
+- Added `opts.env` passthrough to codex spawn path (`sanitizeEnvCodex`): caller-supplied env merges last (caller wins)
 - Fixed Codex child window cascade: `detached: backend !== 'codex'` — node#21825 drops `windowsHide` when `detached: true` on win32
 - Fixed Codex Phase 1 blockers: `resolveCodexNativeExecutable()` probes both `bin/codex.exe` (current) and `codex/codex.exe` (legacy); bumped `DEFAULT_CODEX_MODEL` to gpt-5.5
-- Extended observability field assertions in integration tests; added real-subprocess timeout test via `CODEX_PATH=node.exe`
 
 ## 2026-06
+
+### 2026-06-27 — Report real claude.exe PID to AllMind ledger for liveness tracking
+
+- **Why:** `openSession()` previously recorded the `wt -w 0 nt` launcher PID in the AllMind process ledger. That process exits seconds after spawning the terminal tab, making it useless for liveness checks. AllMind's active-session model needs the real `claude.exe` PID to detect whether a session is still alive.
+- **Impact:** When `opts.dispatchId` is set, a fire-and-forget background job queries Get-CimInstance for a child of the launcher process named `claude*` and POSTs its PID to `/api/internal/ledger/update-pid`. Additive and failure-tolerant: on any error the ledger retains the launcher PID (prior behavior). Sessions without `dispatchId` are unaffected.
+- **Evidence:** 1a36ef9
 
 ### 2026-06-21 — Baked opts.env into interactive launcher; added thread_id to exit hook
 
