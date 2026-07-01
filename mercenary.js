@@ -1149,6 +1149,24 @@ async function openSession(opts = {}) {
   const launcherPath = join(tmpBase, 'launcher.ps1');
   writeFileSync(launcherPath, lines.join('\n'), 'utf8');
 
+  // Launch strategy. A caller may supply opts.launch(ctx) to host the generated
+  // launcher somewhere other than a loose Windows Terminal window (e.g. a Herdr
+  // pane). The launcher script and its env are identical regardless of host —
+  // only where it runs changes. When absent (the default), spawn wt.exe exactly
+  // as before. The callback receives the launcher path + resolved pwsh and must
+  // return at least { pid } (may be null when the real PID is phoned home later,
+  // as the launcher's Start-Job does); any extra fields it returns (pane_id,
+  // tab_id, …) are merged into openSession's return value for the caller.
+  if (typeof opts.launch === 'function') {
+    const launched = await opts.launch({
+      launcherPath,
+      title,
+      cwd: opts.cwd || null,
+      pwsh: resolveInteractivePwsh(),
+    });
+    return { pid: launched?.pid ?? null, title, launcherPath, ...(launched || {}) };
+  }
+
   // Spawn Windows Terminal — pass cwd as -d so the tab opens in the right directory
   const wtArgs = ['-w', '0', 'nt', '--title', title];
   if (opts.cwd) wtArgs.push('-d', opts.cwd);
