@@ -4,6 +4,7 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Fixed `initialMessage` mangling in interactive claude/codex launchers: temp-file → `Get-Content -Raw` → PS variable → bare positional arg, replacing manual double-quote escaping that let backticks/`$` corrupt markdown-rich messages
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
 - Baked all `opts.env` entries into the interactive launcher PS1; exit hook now includes `thread_id` in POST body when spawned with an origin thread — previously only ALLMIND_DISPATCH_ID was baked
 - Added `opts.codexConfigOverrides`: array of raw TOML key=value strings forwarded as `codex --config <entry>` per arg; cwd-independent; AllMind uses it to inject MCP server tables for repo-scoped codex Mind turns
@@ -11,6 +12,16 @@
 - Added `opts.env` passthrough to codex spawn path (`sanitizeEnvCodex`): caller-supplied env merges last (caller wins)
 - Fixed Codex child window cascade: `detached: backend !== 'codex'` — node#21825 drops `windowsHide` when `detached: true` on win32
 - Fixed Codex Phase 1 blockers: `resolveCodexNativeExecutable()` probes both `bin/codex.exe` (current) and `codex/codex.exe` (legacy); bumped `DEFAULT_CODEX_MODEL` to gpt-5.5
+
+## 2026-07
+
+### 2026-07-07 — Fixed initialMessage mangling in interactive launchers (backticks/$ escaping)
+
+- **Symptom:** Markdown-rich `opts.initialMessage` text (e.g. AllMind loop dispatch slices containing inline code like `` `npx tsc` ``) arrived mangled in interactive claude/codex sessions.
+- **Root cause:** `initialMessage` was embedded in a double-quoted PowerShell string escaping only `"`; backticks (PowerShell's escape character) and `$` (interpolation) passed through live, corrupting the message.
+- **Fix:** Write `initialMessage` to `initial-message.txt` in the spawn tmpdir, load via `Get-Content -Raw` into a PS variable, pass the bare variable as the positional arg — reuses the pattern already used for codex's `developer_instructions`. Verified byte-identical roundtrip for backticks, `$` refs, subexpressions, both quote styles, and newlines. Applies to both the claude and codex interactive launchers.
+- **Prevention:** Any future inline PowerShell string embedding of user-controlled/markdown content should use this temp-file → variable pattern instead of manual quote-escaping.
+- **Evidence:** a8e6854
 
 ## 2026-06
 
