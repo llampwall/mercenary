@@ -909,8 +909,13 @@ async function openSessionCodex(opts, title, tmpBase) {
     codexArgs.push('--config "developer_instructions=$diContent"');
   }
 
+  // Initial message via temp file → PS variable — see the claude launcher's
+  // identical block for why inline double-quoting mangles the text.
   if (opts.initialMessage) {
-    codexArgs.push(`"${opts.initialMessage.replace(/"/g, '`"')}"`);
+    const initialMessageFile = join(tmpBase, 'initial-message.txt');
+    writeFileSync(initialMessageFile, opts.initialMessage, 'utf8');
+    lines.push(`$mercInitialMessage = Get-Content "${initialMessageFile}" -Raw`);
+    codexArgs.push('$mercInitialMessage');
   }
 
   lines.push('Write-Host "[mercenary] Launching codex..." -ForegroundColor DarkGray');
@@ -1071,9 +1076,17 @@ async function openSession(opts = {}) {
   }
   if (opts.mcpConfig) claudeArgs.push(`--mcp-config "${opts.mcpConfig.replace(/"/g, '`"')}"`);
 
-  // Initial message as positional arg
+  // Initial message as positional arg — passed via temp file → PS variable
+  // (same pattern as the codex launcher's developer_instructions) so the message
+  // text never enters the launcher script's PowerShell string parsing. The old
+  // inline double-quoted form escaped only `"`, leaving backticks live as
+  // PowerShell's escape character and `$` interpolating — markdown-rich messages
+  // (inline code like `npx tsc --noEmit`) arrived mangled.
   if (opts.initialMessage) {
-    claudeArgs.push(`"${opts.initialMessage.replace(/"/g, '`"')}"`);
+    const initialMessageFile = join(tmpBase, 'initial-message.txt');
+    writeFileSync(initialMessageFile, opts.initialMessage, 'utf8');
+    lines.push(`$mercInitialMessage = Get-Content "${initialMessageFile}" -Raw`);
+    claudeArgs.push('$mercInitialMessage');
   }
 
   // Log prompt sizes for debugging (file-based flags pass paths only, no length risk)
