@@ -64,6 +64,7 @@
 - `--session-id <uuid>` option in `run()` / CLI — attaches to a named session; strips `--no-session-persistence` and passes `--session-id <uuid>` to claude CLI (added 2026-03-12)
 - Concept-to-files lookup table at `docs/sys/lookup.json` — check this before grep/glob searches (added 2026-04-17)
 - `useLocalModel: true` routes spawn through local LiteLLM proxy at `http://127.0.0.1:4000` by default; `localModelUrl` overrides the URL — available on `run()`, `openSession()`, `openHeadlessSession()`; also sets `ALLMIND_LOCAL_MODEL=1` in child env; injects `--settings data/claude-local-model-settings.json` (updated 2026-05-08)
+- `opts.launch(ctx)` — optional callback on `openSession()`; when supplied, receives `{launcherPath, title, cwd, pwsh}` and hosts the generated launcher itself (e.g. an AllMind Herdr pane) instead of spawning `wt.exe`; any extra fields it returns (`pane_id`, `tab_id`, …) merge into `openSession()`'s return value alongside `{pid, title, launcherPath}`; omitted (default) preserves wt.exe spawn byte-for-byte (added 2026-07-01)
 - CLI flags `--use-local-model` / `--local-model-url <url>` / `--local-model-settings-path <path>` accepted at CLI entry; snake_case and camelCase aliases both parsed (updated 2026-05-08)
 - `data/claude-local-model-settings.json`: defensive Bash-deny + force PowerShell tool config for local-model spawns (added 2026-05-08)
 
