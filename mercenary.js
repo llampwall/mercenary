@@ -246,6 +246,9 @@ function sanitizeEnv(opts = {}) {
   delete env.ANTHROPIC_AUTH_TOKEN;
   delete env.CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR;
   delete env.ANTHROPIC_MODEL;
+  // A leaked CLAUDE_CONFIG_DIR redirects the child to a different login's
+  // credentials (2026-07-09: AllMind threads authenticated as the wrong account).
+  delete env.CLAUDE_CONFIG_DIR;
   env.SHELL = 'C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe';
   env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(opts.maxTokens || 65536);
   if (isLocalModelEnabled(opts)) {
