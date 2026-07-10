@@ -4,7 +4,7 @@
 # State
 
 ## Current Objective
-Core implementation complete. Codex Phase 1 blockers resolved. Next: real CI, versioning workflow, remaining Codex integration test coverage.
+Core implementation complete. Next: real CI, versioning workflow, remaining Codex integration test coverage.
 
 ## Active Work
 - None — all recent work committed
@@ -32,7 +32,7 @@ Core implementation complete. Codex Phase 1 blockers resolved. Next: real CI, ve
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-07-07
-Commits covered through: a8e6854ddd73fbbb48b0d9cfe8f7b885ab66b95d
+Last memory update: 2026-07-10
+Commits covered through: 7ba9e67f24966caaca7e589203284d382fd34f52
 
-<!-- chinvex:last-commit:a8e6854ddd73fbbb48b0d9cfe8f7b885ab66b95d -->
+<!-- chinvex:last-commit:7ba9e67f24966caaca7e589203284d382fd34f52 -->

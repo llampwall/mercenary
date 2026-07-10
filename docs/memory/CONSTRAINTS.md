@@ -15,7 +15,7 @@
 ## Rules
 - Always set `--dangerously-skip-permissions` on every spawned claude process (updated 2026-02-25)
 - `--no-session-persistence` applies only to one-shot `-p` launches; do NOT pass it to `openSession()` interactive sessions (updated 2026-02-25)
-- Always delete `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY` from child env — exception: in local-model branch, `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT` are PRESERVED to match the env shape of an interactive CC session (updated 2026-05-08)
+- Always delete `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY`, `CLAUDE_CONFIG_DIR` from child env — exception: in local-model branch, `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT` are PRESERVED to match the env shape of an interactive CC session (updated 2026-07-09)
 - Force `SHELL=pwsh` in `sanitizeEnv()` and in `openSession()` launcher to prevent PM2-inherited bash.exe (updated 2026-02-25)
 - Use `shell: false` with resolved claude binary path — never rely on shell PATH lookup
 - `pipeline` role uses `--strict-mcp-config` only; no `mcp-none.json` fallback injected (global mcpServers is empty) (updated 2026-02-26)
@@ -85,6 +85,7 @@
 - Codex CLI's built-in default model changes between versions; `buildCodexArgs` pins `gpt-5.5` (confirmed on Codex CLI 0.133.0) and always passes `--model` — if a future release rejects this, bump `DEFAULT_CODEX_MODEL` and validate before deploying (updated 2026-06-04)
 - `.cmd` test helper scripts fail with EINVAL when spawned with `windowsHide: true` + `detached: true` on Windows; use `.js` helpers via `node` instead (added 2026-05-18)
 - On win32, `windowsHide` is silently dropped when `detached: true` (node#21825) — codex spawns must use `detached: false` so `windowsHide: true` is honored and codex gets a hidden console; treeKill still works via `taskkill /T /F /PID` (added 2026-06-05)
+- A leaked `CLAUDE_CONFIG_DIR` in the parent env redirects a spawned claude child to a different login's credentials — `sanitizeEnv()` strips it on every claude spawn path; `sanitizeEnvCodex` is untouched since codex does not read this var (added 2026-07-09)
 
 ## Superseded
 - (Superseded 2026-02-26) MCP fallback config path `mcp-none.json` — global mcpServers is now empty, fallback removed (18c991f)

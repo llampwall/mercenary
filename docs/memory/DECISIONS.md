@@ -4,16 +4,22 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Fixed leaked `CLAUDE_CONFIG_DIR` causing spawned claude sessions to authenticate as the wrong account — now stripped in `sanitizeEnv()`
 - Fixed `initialMessage` mangling in interactive claude/codex launchers: temp-file → `Get-Content -Raw` → PS variable → bare positional arg, replacing manual double-quote escaping that let backticks/`$` corrupt markdown-rich messages
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
 - Baked all `opts.env` entries into the interactive launcher PS1; exit hook now includes `thread_id` in POST body when spawned with an origin thread — previously only ALLMIND_DISPATCH_ID was baked
 - Added `opts.codexConfigOverrides`: array of raw TOML key=value strings forwarded as `codex --config <entry>` per arg; cwd-independent; AllMind uses it to inject MCP server tables for repo-scoped codex Mind turns
 - Added `qwen` backend alias: `normalizeBackend()` rewrites `backend:'qwen'` → claude + `useLocalModel:true`; claude-tier model strings dropped, explicit local ids kept
-- Added `opts.env` passthrough to codex spawn path (`sanitizeEnvCodex`): caller-supplied env merges last (caller wins)
-- Fixed Codex child window cascade: `detached: backend !== 'codex'` — node#21825 drops `windowsHide` when `detached: true` on win32
-- Fixed Codex Phase 1 blockers: `resolveCodexNativeExecutable()` probes both `bin/codex.exe` (current) and `codex/codex.exe` (legacy); bumped `DEFAULT_CODEX_MODEL` to gpt-5.5
 
 ## 2026-07
+
+### 2026-07-09 — Fixed leaked CLAUDE_CONFIG_DIR causing wrong-account authentication
+
+- **Symptom:** AllMind agents authenticated as the wrong account on 2026-07-09.
+- **Root cause:** A leaked `CLAUDE_CONFIG_DIR` in the parent environment was inherited by spawned claude children, redirecting them to a different login's credentials. `sanitizeEnv()` did not strip this var.
+- **Fix:** `sanitizeEnv()` now deletes `CLAUDE_CONFIG_DIR` from the child env alongside the existing auth-related deletions. `sanitizeEnvCodex` left untouched — codex does not read this var.
+- **Prevention:** Any env var that can redirect config/credential resolution (not just auth tokens) must be audited for child-env leakage, not just the obvious `ANTHROPIC_*` vars.
+- **Evidence:** 7ba9e67
 
 ### 2026-07-07 — Fixed initialMessage mangling in interactive launchers (backticks/$ escaping)
 
