@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 // Import module exports
-import { run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnv, sanitizeEnvCodex, buildCodexArgs, parseArgs, ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, checkPidAlive, discoverProcesses, readLedger, writeLedger } from '../mercenary.js';
+import { run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnv, sanitizeEnvCodex, buildArgs, buildCodexArgs, parseArgs, ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, checkPidAlive, discoverProcesses, readLedger, writeLedger } from '../mercenary.js';
 
 const MERCENARY = join(import.meta.dirname, '..', 'mercenary.js');
 
@@ -394,6 +394,39 @@ describe('buildCodexArgs', () => {
     assert.ok(msgs.some(m => m.includes('allowedTools')));
     const args = buildCodexArgs({ prompt: 'hello', allowedTools: 'Bash,Read' }, () => {});
     assert.ok(!args.includes('--allowed-tools'));
+  });
+});
+
+describe('buildArgs (claude one-shot) tool selection', () => {
+  it('opts.tools:"none" emits --tools with an empty-string arg (toolless)', () => {
+    const args = buildArgs({ prompt: 'hi', tools: 'none' });
+    const idx = args.indexOf('--tools');
+    assert.ok(idx >= 0, '--tools not found');
+    assert.strictEqual(args[idx + 1], '', 'toolless spawn must pass an empty-string value');
+  });
+
+  it('opts.tools:"" emits --tools with an empty-string arg (toolless)', () => {
+    const args = buildArgs({ prompt: 'hi', tools: '' });
+    const idx = args.indexOf('--tools');
+    assert.ok(idx >= 0, '--tools not found');
+    assert.strictEqual(args[idx + 1], '');
+  });
+
+  it('opts.tools list passes the names through verbatim', () => {
+    const args = buildArgs({ prompt: 'hi', tools: 'Read,Grep' });
+    const idx = args.indexOf('--tools');
+    assert.strictEqual(args[idx + 1], 'Read,Grep');
+  });
+
+  it('no --tools when opts.tools is absent', () => {
+    const args = buildArgs({ prompt: 'hi' });
+    assert.ok(!args.includes('--tools'));
+  });
+
+  it('--tools is independent of --allowed-tools (a permission rule, no-op under bypass)', () => {
+    const args = buildArgs({ prompt: 'hi', tools: 'none', allowedTools: 'Read' });
+    assert.ok(args.includes('--tools'));
+    assert.ok(args.includes('--allowed-tools'));
   });
 });
 

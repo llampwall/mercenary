@@ -68,6 +68,7 @@
 - `opts.launch(ctx)` — optional callback on `openSession()`; when supplied, receives `{launcherPath, title, cwd, pwsh}` and hosts the generated launcher itself (e.g. an AllMind Herdr pane) instead of spawning `wt.exe`; any extra fields it returns (`pane_id`, `tab_id`, …) merge into `openSession()`'s return value alongside `{pid, title, launcherPath}`; omitted (default) preserves wt.exe spawn byte-for-byte (added 2026-07-01)
 - CLI flags `--use-local-model` / `--local-model-url <url>` / `--local-model-settings-path <path>` accepted at CLI entry; snake_case and camelCase aliases both parsed (updated 2026-05-08)
 - `data/claude-local-model-settings.json`: defensive Bash-deny + force PowerShell tool config for local-model spawns (added 2026-05-08)
+- `opts.tools` on `run()` (claude one-shot, `buildArgs`) selects the built-in TOOLSET via `--tools`: `'none'`/`''` emits `--tools ""` (fully toolless — the first reply is the answer, for pure classifier lanes), a comma/space list restricts to those names, `'default'` = all tools. This is NOT `allowedTools`: `--allowed-tools` is a permission rule and a no-op under `--dangerously-skip-permissions` (which every claude spawn sets), so it cannot make a spawn toolless; `--tools` changes what the model is offered and is honored regardless of permission mode. `buildArgs` is exported for unit testing (added 2026-07-10)
 
 ## Hazards
 - `--interactive` silently fails if `wt` or `pwsh` are not installed/discoverable on PATH

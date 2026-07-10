@@ -551,6 +551,18 @@ function buildArgs(opts) {
   }
 
   if (opts.allowedTools) args.push('--allowed-tools', opts.allowedTools);
+  // Toolset selection from the built-in set (CLI --tools). DISTINCT from --allowed-tools:
+  // that is a PERMISSION rule and is a no-op under --dangerously-skip-permissions (this
+  // path always bypasses permissions, per CONSTRAINTS), so it cannot make a spawn toolless.
+  // --tools changes which built-in tools the model is even offered, so it is honored
+  // regardless of permission mode. opts.tools: '' or 'none' → fully toolless (a pure
+  // classifier: no Task/Read/Grep, so the first reply is the answer); a comma/space list
+  // restricts to those names; 'default' = all tools. The empty-string arg is passed as its
+  // own argv element (shell:false), which the CLI reads as "disable all tools".
+  if (opts.tools !== undefined && opts.tools !== null) {
+    const t = String(opts.tools).trim();
+    args.push('--tools', (t === '' || t.toLowerCase() === 'none') ? '' : t);
+  }
   // Model selection — when local-model is enabled and caller didn't specify
   // a model, default to the configured local-model name. See openSession for
   // the full rationale (ANTHROPIC_MODEL env is broken on 2.1.132).
@@ -1633,7 +1645,7 @@ if (resolve(process.argv[1]) === resolve(import.meta.filename)) {
 }
 
 export {
-  run, openSession, openHeadlessSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnv, sanitizeEnvCodex, buildCodexArgs, parseArgs, normalizeBackend,
+  run, openSession, openHeadlessSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnv, sanitizeEnvCodex, buildArgs, buildCodexArgs, parseArgs, normalizeBackend,
   ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, ledgerPurge,
   checkPidAlive, discoverProcesses, readLedger, writeLedger, LEDGER_PATH,
 };
