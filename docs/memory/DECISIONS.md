@@ -4,6 +4,7 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Added `opts.tools` on `run()`: maps to CLI's `--tools` flag to select the built-in toolset itself (honored regardless of permission mode), distinct from `--allowed-tools` which is a no-op under `--dangerously-skip-permissions`
 - Fixed leaked `CLAUDE_CONFIG_DIR` causing spawned claude sessions to authenticate as the wrong account — now stripped in `sanitizeEnv()`
 - Fixed `initialMessage` mangling in interactive claude/codex launchers: temp-file → `Get-Content -Raw` → PS variable → bare positional arg, replacing manual double-quote escaping that let backticks/`$` corrupt markdown-rich messages
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
@@ -12,6 +13,12 @@
 - Added `qwen` backend alias: `normalizeBackend()` rewrites `backend:'qwen'` → claude + `useLocalModel:true`; claude-tier model strings dropped, explicit local ids kept
 
 ## 2026-07
+
+### 2026-07-10 — Added opts.tools to select the built-in toolset via --tools
+
+- **Why:** AllMind's mission-loop triage classifier lane tried to run toolless with `allowedTools:'none'`, but `--allowed-tools` is a permission rule that's a no-op under `--dangerously-skip-permissions` (set on every claude spawn) — the model kept its full toolset and investigated instead of answering directly.
+- **Impact:** `buildArgs` gained `opts.tools`, mapping to the CLI's `--tools` flag: `'none'`/`''` → `--tools ""` (fully toolless), a comma/space list → restricted toolset, `'default'` → all tools. Unlike `allowedTools`, this changes what the model is offered and is honored regardless of permission mode. `buildArgs` exported for unit testing.
+- **Evidence:** 1c244b6
 
 ### 2026-07-09 — Fixed leaked CLAUDE_CONFIG_DIR causing wrong-account authentication
 
