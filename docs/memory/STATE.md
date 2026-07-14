@@ -33,6 +33,6 @@ Core implementation complete. Next: real CI, versioning workflow, remaining Code
 
 ---
 Last memory update: 2026-07-13
-Commits covered through: 8b627c0799ff727122bebbb2e445dc217498cdc1
+Commits covered through: 9158aac9170b8b4fe677b3242c1a06b760213607
 
-<!-- chinvex:last-commit:8b627c0799ff727122bebbb2e445dc217498cdc1 -->
+<!-- chinvex:last-commit:9158aac9170b8b4fe677b3242c1a06b760213607 -->
