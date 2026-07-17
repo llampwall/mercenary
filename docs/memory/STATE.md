@@ -32,7 +32,7 @@ Core implementation complete. Next: real CI, versioning workflow, remaining Code
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-07-16
-Commits covered through: d732eba7e23bf2abf6e32cb3ccb3adf4911d3ae9
+Last memory update: 2026-07-17
+Commits covered through: e3d3619abac498e213407a1a3fb8211934c5a4ac
 
-<!-- chinvex:last-commit:d732eba7e23bf2abf6e32cb3ccb3adf4911d3ae9 -->
+<!-- chinvex:last-commit:e3d3619abac498e213407a1a3fb8211934c5a4ac -->
