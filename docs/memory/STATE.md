@@ -4,7 +4,7 @@
 # State
 
 ## Current Objective
-Core implementation complete. Next: real CI, versioning workflow, remaining Codex integration test coverage.
+Core implementation complete; env-builder parity work landed. Next: real CI, versioning workflow, remaining Codex integration test coverage.
 
 ## Active Work
 - None — all recent work committed
@@ -32,7 +32,7 @@ Core implementation complete. Next: real CI, versioning workflow, remaining Code
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-07-23
-Commits covered through: 33b66558bebe29569f9a078d35b4903a956f404b
+Last memory update: 2026-08-01
+Commits covered through: 2db1eae47c83bc20b4839e71b27b98912d02c517
 
-<!-- chinvex:last-commit:33b66558bebe29569f9a078d35b4903a956f404b -->
+<!-- chinvex:last-commit:2db1eae47c83bc20b4839e71b27b98912d02c517 -->

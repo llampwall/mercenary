@@ -4,13 +4,29 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Moved the `ALLMIND_AGENT_SESSION` stamp from per-caller to mercenary's own three env builders (`sanitizeEnv`, `sanitizeEnvCodex`, `buildLauncherEnvLines`) — the process boundary converges where per-caller stamping could not
+- Fixed `opts.env` being silently dropped on the headless claude path; `sanitizeEnv()` now merges it last like `sanitizeEnvCodex` and the interactive builder
+- Extracted `buildLauncherEnvLines` from `openSession()` and exported it alongside `AGENT_SESSION_VAR` so the interactive env block is unit-testable without opening a terminal
 - Added `opts.tools` on `run()`: maps to CLI's `--tools` flag to select the built-in toolset itself (honored regardless of permission mode), distinct from `--allowed-tools` which is a no-op under `--dangerously-skip-permissions`
 - Fixed leaked `CLAUDE_CONFIG_DIR` causing spawned claude sessions to authenticate as the wrong account — now stripped in `sanitizeEnv()`
 - Fixed `initialMessage` mangling in interactive claude/codex launchers: temp-file → `Get-Content -Raw` → PS variable → bare positional arg, replacing manual double-quote escaping that let backticks/`$` corrupt markdown-rich messages
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
-- Baked all `opts.env` entries into the interactive launcher PS1; exit hook now includes `thread_id` in POST body when spawned with an origin thread — previously only ALLMIND_DISPATCH_ID was baked
-- Added `opts.codexConfigOverrides`: array of raw TOML key=value strings forwarded as `codex --config <entry>` per arg; cwd-independent; AllMind uses it to inject MCP server tables for repo-scoped codex Mind turns
-- Added `qwen` backend alias: `normalizeBackend()` rewrites `backend:'qwen'` → claude + `useLocalModel:true`; claude-tier model strings dropped, explicit local ids kept
+
+## 2026-08
+
+### 2026-08-01 — Stamp the agent-session marker at mercenary's own env builders
+
+- **Why:** AllMind's restart discipline (restart-broker.html §17, mission m_msb6isby1482d2ed) makes `allmind-ignition` and the pm2 gate refuse destructive verbs whenever `ALLMIND_AGENT_SESSION` is in their environment, so every AllMind-spawned session must carry it. The marker was stamped at one caller (`allmind lib/agent-spawner.js`), which reached only 7 of 46 mercenary spawn sites — the interactive and headless routes, the ones the operator dispatches builders through, were not among them. Per-caller stamping cannot converge; the process boundary can.
+- **Impact:** All three env builders stamp the marker: `sanitizeEnv` (headless claude), `sanitizeEnvCodex` (codex), `buildLauncherEnvLines` (interactive). Each stamps AFTER the caller's `opts.env` merge — a caller may NAME the session by passing the marker (that is how agent-spawner contributes its seam-minted agentId), but blank/whitespace falls through to `opts.dispatchId`, then a locally minted id; case-variant keys collapse to one canonical spelling. `buildLauncherEnvLines` was extracted from `openSession()` unchanged apart from the new line and exported alongside `AGENT_SESSION_VAR`.
+- **Evidence:** 2db1eae — 22 new tests, `node --test --test-name-pattern="agent-session marker" test/mercenary.test.js` → 22 pass, 0 fail, 82 skipped (integration suites filtered out deliberately)
+
+### 2026-08-01 — Fixed opts.env being dropped on the headless claude path
+
+- **Symptom:** `run({ env })` had no effect on the claude headless path — caller-supplied env vars never reached the child, with no error.
+- **Root cause:** `sanitizeEnv()` built the child env from `process.env` plus the local-model profile and returned it without ever merging `opts.env`. The codex path (`sanitizeEnvCodex`) and the interactive session builder both merged it, so callers reasonably assumed `run({ env })` worked everywhere.
+- **Fix:** Merge `opts.env` last so caller-supplied values win, matching `sanitizeEnvCodex`. The poisoning strips (`CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY`, `CLAUDE_CONFIG_DIR`) are unchanged and still run first.
+- **Prevention:** When one spawn path gains an env-shaping option, verify all three builders honor it — divergence here fails silently rather than erroring.
+- **Evidence:** b4f647a (surfaced by AllMind's restart-broker enforcement build, which needed a way to stamp identity through `run()`)
 
 ## 2026-07
 
