@@ -264,6 +264,12 @@ function sanitizeEnv(opts = {}) {
     // include user:inference), this keeps us in subscription mode.
     env.CLAUDE_CODE_REMOTE = '1';
   }
+  // Caller-supplied env merges last so it wins — same contract the codex path
+  // (sanitizeEnvCodex) and the interactive session builder have always honored.
+  // Without this the headless claude path silently dropped opts.env, so a caller
+  // that stamps an identity marker on the child (AllMind's ALLMIND_AGENT_SESSION,
+  // restart-broker enforcement) got no marker and no error.
+  if (opts.env && typeof opts.env === 'object') Object.assign(env, opts.env);
   return env;
 }
 
