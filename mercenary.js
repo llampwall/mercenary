@@ -238,6 +238,68 @@ function escapePowerShellString(value) {
   return String(value).replace(/"/g, '`"');
 }
 
+// --- Agent-session marker ---
+//
+// §17 restart discipline (P:\software\allmind\docs\specs\restart-broker.html#ruling-broker-enforced,
+// mission m_msb6isby1482d2ed). Restart authority is operator-lane: a session AllMind spawns does
+// not restart services directly, it enqueues a restart-broker request. `allmind-ignition` and the
+// pm2 gate decide who is a spawned session by reading ALLMIND_AGENT_SESSION out of their own
+// environment, so the marker has to be on the child, and the whole process tree inherits it.
+//
+// THE STAMP LIVES HERE, AT THE PROCESS BOUNDARY, NOT AT EACH CALLER. Stamping it in one caller
+// (AllMind's lib/agent-spawner.js) reached 7 of 46 mercenary spawn sites and missed the
+// interactive and headless routes entirely — the class of session that bounced the fleet mid-day
+// on 2026-08-01. Every mercenary spawn funnels through one of the three env builders below
+// (sanitizeEnv, sanitizeEnvCodex, and the interactive launcher's env lines), so stamping there
+// covers all of them by construction and a new spawn site inherits the marker for free.
+const AGENT_SESSION_VAR = 'ALLMIND_AGENT_SESSION';
+const AGENT_SESSION_VAR_LOWER = AGENT_SESSION_VAR.toLowerCase();
+
+let agentSessionSeq = 0;
+function mintAgentSessionId() {
+  agentSessionSeq += 1;
+  return `merc-${process.pid}-${Date.now()}-${agentSessionSeq}`;
+}
+
+/**
+ * Resolve the marker value for a spawn. A caller may NAME the session — AllMind's agent-spawner
+ * passes its own seam-minted agentId through opts.env so the ledger, the log file, and the
+ * refusal text all agree on who was refused. A caller may not BLANK it: an empty or whitespace
+ * value falls through to the dispatch id, then to a locally minted one, so every child comes out
+ * marked. Suppression is what the ruling closes; identity is the caller's to contribute.
+ */
+function resolveAgentSessionId(opts = {}) {
+  const candidates = [];
+  if (opts.env && typeof opts.env === 'object') {
+    for (const [k, v] of Object.entries(opts.env)) {
+      if (k.toLowerCase() === AGENT_SESSION_VAR_LOWER) candidates.push(v);
+    }
+  }
+  candidates.push(opts.dispatchId);
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim()) return c.trim();
+  }
+  return mintAgentSessionId();
+}
+
+/**
+ * Stamp the marker onto a built env object. Called AFTER the caller's opts.env merge in every
+ * builder, deliberately: that merge exists so a caller can add identity vars, not so it can
+ * suppress an enforcement fact. Mutates and returns `env`.
+ */
+function stampAgentSession(env, opts = {}) {
+  const value = resolveAgentSessionId(opts);
+  // Windows env keys are case-insensitive and both readers treat any case as the marker
+  // (allmind-ignition's readAgentSessionMarker, the pm2 gate's $env: provider). This env is a
+  // plain JS object, not the case-folding process.env proxy, so collapse any case variant a
+  // caller merged in and leave exactly one canonical key.
+  for (const k of Object.keys(env)) {
+    if (k !== AGENT_SESSION_VAR && k.toLowerCase() === AGENT_SESSION_VAR_LOWER) delete env[k];
+  }
+  env[AGENT_SESSION_VAR] = value;
+  return env;
+}
+
 function sanitizeEnv(opts = {}) {
   const env = { ...process.env };
   delete env.CLAUDECODE;
@@ -270,7 +332,7 @@ function sanitizeEnv(opts = {}) {
   // that stamps an identity marker on the child (AllMind's ALLMIND_AGENT_SESSION,
   // restart-broker enforcement) got no marker and no error.
   if (opts.env && typeof opts.env === 'object') Object.assign(env, opts.env);
-  return env;
+  return stampAgentSession(env, opts);
 }
 
 function sanitizeEnvCodex(opts = {}) {
@@ -284,7 +346,42 @@ function sanitizeEnvCodex(opts = {}) {
   // Caller-supplied env (e.g. ALLMIND_THREAD_ID for the codex MCP child to
   // attribute dispatches to the right Mind thread) merges last so it wins.
   if (opts.env && typeof opts.env === 'object') Object.assign(env, opts.env);
-  return env;
+  return stampAgentSession(env, opts);
+}
+
+/**
+ * The interactive claude launcher's env block — the third env builder, emitted as PowerShell
+ * `$env:` assignments into the generated launcher script rather than handed to spawn() as an
+ * object. Pure and exported so the agent-session stamp on this path is testable without
+ * generating a launcher or opening a terminal.
+ *
+ * @param {Object} opts - the openSession options
+ * @param {Object|null} localModelProfile - resolved local-model env profile, or null
+ * @param {string[]} localModelEnvLines - already-rendered `$env:` lines for that profile
+ * @returns {string[]} PowerShell lines, in emission order
+ */
+function buildLauncherEnvLines(opts = {}, localModelProfile = null, localModelEnvLines = []) {
+  return [
+    '$env:CLAUDECODE = $null',
+    '$env:CLAUDE_CODE_ENTRYPOINT = $null',
+    '$env:ANTHROPIC_API_KEY = $null',
+    '$env:ANTHROPIC_AUTH_TOKEN = $null',
+    '$env:ANTHROPIC_MODEL = $null',
+    '$env:CLAUDE_CODE_USE_POWERSHELL_TOOL = "1"',
+    '$env:CLAUDE_CODE_REMOTE = "1"',
+    '$env:SHELL = "C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe"',
+    `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "${opts.maxTokens || 65536}"`,
+    // Expose dispatch_id so the spawned session can include it in events
+    ...(opts.dispatchId ? [`$env:ALLMIND_DISPATCH_ID = "${opts.dispatchId.replace(/"/g, '')}"`] : []),
+    // Bake any additional caller-supplied env vars (e.g. ALLMIND_ORIGIN_THREAD_ID, ALLMIND_THREAD_ID)
+    ...(opts.env ? Object.entries(opts.env).map(([k, v]) => `$env:${k} = "${escapePowerShellString(String(v))}"`) : []),
+    // §17 restart discipline — emitted LAST so a caller's opts.env cannot blank it. PowerShell's
+    // $env: provider is case-insensitive, so this assignment wins over any case variant above.
+    `$env:${AGENT_SESSION_VAR} = "${escapePowerShellString(resolveAgentSessionId(opts))}"`,
+    // Route through a local Claude-compatible endpoint when caller opts in
+    ...localModelEnvLines,
+    ...(localModelProfile ? [`$env:ALLMIND_LOCAL_MODEL = "1"`] : []),
+  ];
 }
 
 // --- Process Tree Kill ---
@@ -1008,22 +1105,7 @@ async function openSession(opts = {}) {
     '# Mercenary launcher -- auto-generated',
     '$ErrorActionPreference = "Continue"',
     'Write-Host "[mercenary] Launcher started" -ForegroundColor DarkGray',
-    '$env:CLAUDECODE = $null',
-    '$env:CLAUDE_CODE_ENTRYPOINT = $null',
-    '$env:ANTHROPIC_API_KEY = $null',
-    '$env:ANTHROPIC_AUTH_TOKEN = $null',
-    '$env:ANTHROPIC_MODEL = $null',
-    '$env:CLAUDE_CODE_USE_POWERSHELL_TOOL = "1"',
-    '$env:CLAUDE_CODE_REMOTE = "1"',
-    '$env:SHELL = "C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe"',
-    `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "${opts.maxTokens || 65536}"`,
-    // Expose dispatch_id so the spawned session can include it in events
-    ...(opts.dispatchId ? [`$env:ALLMIND_DISPATCH_ID = "${opts.dispatchId.replace(/"/g, '')}"`] : []),
-    // Bake any additional caller-supplied env vars (e.g. ALLMIND_ORIGIN_THREAD_ID, ALLMIND_THREAD_ID)
-    ...(opts.env ? Object.entries(opts.env).map(([k, v]) => `$env:${k} = "${escapePowerShellString(String(v))}"`) : []),
-    // Route through a local Claude-compatible endpoint when caller opts in
-    ...localModelEnvLines,
-    ...(localModelProfile ? [`$env:ALLMIND_LOCAL_MODEL = "1"`] : []),
+    ...buildLauncherEnvLines(opts, localModelProfile, localModelEnvLines),
   ];
 
   // Set working directory before launching claude
@@ -1654,4 +1736,5 @@ export {
   run, openSession, openHeadlessSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnv, sanitizeEnvCodex, buildArgs, buildCodexArgs, parseArgs, normalizeBackend,
   ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, ledgerPurge,
   checkPidAlive, discoverProcesses, readLedger, writeLedger, LEDGER_PATH,
+  buildLauncherEnvLines, AGENT_SESSION_VAR,
 };

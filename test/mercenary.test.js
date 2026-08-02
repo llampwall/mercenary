@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 // Import module exports
-import { run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnv, sanitizeEnvCodex, buildArgs, buildCodexArgs, parseArgs, ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, checkPidAlive, discoverProcesses, readLedger, writeLedger } from '../mercenary.js';
+import { run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnv, sanitizeEnvCodex, buildArgs, buildCodexArgs, parseArgs, ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, checkPidAlive, discoverProcesses, readLedger, writeLedger, buildLauncherEnvLines, AGENT_SESSION_VAR } from '../mercenary.js';
 
 const MERCENARY = join(import.meta.dirname, '..', 'mercenary.js');
 
@@ -202,6 +202,83 @@ describe('sanitizeEnv', () => {
     assert.strictEqual(env.ANTHROPIC_MODEL, undefined);
     assert.strictEqual(env.API_TIMEOUT_MS, '1234');
     assert.strictEqual(env.ANTHROPIC_AUTH_TOKEN, undefined);
+  });
+});
+
+// §17 restart discipline (P:\software\allmind\docs\specs\restart-broker.html#ruling-broker-enforced,
+// mission m_msb6isby1482d2ed). Behavioural coverage of the stamp: these call the three env
+// builders directly with injected opts and read the env they return. Nothing here spawns a
+// process, opens a terminal, or touches a service.
+describe('agent-session marker (ALLMIND_AGENT_SESSION)', () => {
+  const builders = [
+    ['sanitizeEnv', (opts) => sanitizeEnv(opts)],
+    ['sanitizeEnvCodex', (opts) => sanitizeEnvCodex(opts)],
+    // The interactive launcher emits PowerShell rather than an env object. Fold its lines into
+    // the same {KEY: value} shape so it is held to the identical assertions. Later assignments
+    // win, matching PowerShell's case-insensitive $env: provider.
+    ['buildLauncherEnvLines', (opts) => {
+      const env = {};
+      for (const line of buildLauncherEnvLines(opts)) {
+        const m = line.match(/^\$env:([A-Za-z0-9_]+) = "(.*)"$/);
+        if (m) env[m[1].toUpperCase()] = m[2];
+      }
+      return env;
+    }],
+  ];
+
+  for (const [name, build] of builders) {
+    describe(name, () => {
+      it('marks every child, even when the caller declares nothing', () => {
+        const env = build({});
+        assert.ok(env[AGENT_SESSION_VAR], `${name} must stamp ${AGENT_SESSION_VAR}`);
+        assert.match(env[AGENT_SESSION_VAR], /\S/, 'the marker must be non-blank');
+      });
+
+      it('mints a distinct id per spawn when the caller declares nothing', () => {
+        const a = build({})[AGENT_SESSION_VAR];
+        const b = build({})[AGENT_SESSION_VAR];
+        assert.notStrictEqual(a, b, 'each unnamed session gets its own minted id');
+      });
+
+      it('uses the dispatch id when the caller supplies one', () => {
+        const env = build({ dispatchId: 'spawn-1785639681517' });
+        assert.strictEqual(env[AGENT_SESSION_VAR], 'spawn-1785639681517');
+      });
+
+      it('lets a caller name the session through opts.env', () => {
+        const env = build({ env: { [AGENT_SESSION_VAR]: 'agent-abc123' } });
+        assert.strictEqual(env[AGENT_SESSION_VAR], 'agent-abc123');
+      });
+
+      it('a caller cannot blank the marker through opts.env', () => {
+        for (const suppressed of ['', '   ', undefined, null]) {
+          const env = build({ env: { [AGENT_SESSION_VAR]: suppressed }, dispatchId: 'spawn-77' });
+          assert.strictEqual(env[AGENT_SESSION_VAR], 'spawn-77',
+            `opts.env ${JSON.stringify(suppressed)} must not suppress the marker`);
+        }
+      });
+
+      it('a caller cannot blank the marker with a lowercase key either', () => {
+        const env = build({ env: { allmind_agent_session: '' } });
+        assert.ok(env[AGENT_SESSION_VAR], 'a lowercase blank must not win');
+        assert.match(env[AGENT_SESSION_VAR], /\S/);
+      });
+
+      it('leaves exactly one marker key so the child sees one value', () => {
+        const env = build({ env: { allmind_agent_session: 'sneaky', ALLMIND_AGENT_SESSION: 'named' } });
+        const keys = Object.keys(env).filter(k => k.toLowerCase() === AGENT_SESSION_VAR.toLowerCase());
+        assert.deepStrictEqual(keys, [AGENT_SESSION_VAR]);
+      });
+    });
+  }
+
+  it('the launcher emits the marker after the caller env block', () => {
+    // Emission order is the enforcement: PowerShell's $env: provider is case-insensitive, so the
+    // last assignment is the one the session runs with.
+    const lines = buildLauncherEnvLines({ env: { ALLMIND_AGENT_SESSION: '', ALLMIND_THREAD_ID: 't1' } });
+    const callerIdx = lines.findIndex(l => l.startsWith('$env:ALLMIND_THREAD_ID'));
+    const markerIdx = lines.findLastIndex(l => l.startsWith(`$env:${AGENT_SESSION_VAR} `));
+    assert.ok(markerIdx > callerIdx, 'the marker assignment must come after the caller env block');
   });
 });
 
