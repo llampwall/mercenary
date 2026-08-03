@@ -17,8 +17,8 @@ Core implementation complete; env-builder parity and routing-var sanitization la
 - [ ] Extend routing-var strip to `sanitizeEnvCodex` and `buildLauncherEnvLines` (only `sanitizeEnv` is covered)
 - [ ] Replace placeholder CI with real test execution (Windows runner)
 - [ ] Define release/versioning workflow for `mercenary` CLI distribution
-- [ ] Add integration tests for Codex backend (MCP disable, sandbox defaults, native exe)
-- [ ] Finish remaining Codex backend surface per `docs/plans/2026-02-27-codex-backend.md`
+- [ ] Harden `readLedger()` against malformed JSON — a corrupt ledger currently crashes `--ps`/`--audit`/`--purge`
+- [ ] Finish Codex backend surface + integration tests per `docs/plans/2026-02-27-codex-backend.md`
 
 ## Quick Reference
 - Run: `node mercenary.js --prompt "test" --timeout 10`
@@ -33,7 +33,7 @@ Core implementation complete; env-builder parity and routing-var sanitization la
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-08-02
+Last memory update: 2026-08-03
 Commits covered through: 4566193cd530ead090d1163ad6cae79abd9bac23
 
 <!-- chinvex:last-commit:4566193cd530ead090d1163ad6cae79abd9bac23 -->
