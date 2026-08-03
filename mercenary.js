@@ -308,6 +308,19 @@ function sanitizeEnv(opts = {}) {
   delete env.ANTHROPIC_AUTH_TOKEN;
   delete env.CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR;
   delete env.ANTHROPIC_MODEL;
+  // Model/endpoint routing vars: a leaked ANTHROPIC_BASE_URL (e.g. from AllMind's
+  // local-model lanes) would silently route every spawned session to the local
+  // endpoint. Mirrors allmind lib/claude-env.js MODEL_ROUTING_VARS; the
+  // isLocalModelEnabled block below re-sets these deliberately when a lane opts in.
+  delete env.ANTHROPIC_BASE_URL;
+  delete env.ANTHROPIC_SMALL_FAST_MODEL;
+  delete env.CLAUDE_CODE_SUBAGENT_MODEL;
+  delete env.API_TIMEOUT_MS;
+  delete env.ALLMIND_LOCAL_MODEL;
+  delete env.CLAUDE_CODE_REMOTE;
+  for (const k of Object.keys(env)) {
+    if (k.toUpperCase().startsWith('ANTHROPIC_DEFAULT_')) delete env[k];
+  }
   // A leaked CLAUDE_CONFIG_DIR redirects the child to a different login's
   // credentials (2026-07-09: AllMind threads authenticated as the wrong account).
   delete env.CLAUDE_CONFIG_DIR;

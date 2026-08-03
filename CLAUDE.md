@@ -28,7 +28,7 @@ JavaScript (Node.js 22, ESM)
 - Pipeline role MUST enforce strict MCP isolation via `--strict-mcp-config` and MUST NOT inject a hardcoded `mcp-none.json` fallback.
 - Interactive sessions default `strictMcp` to `false`; strict MCP in interactive mode is explicit opt-in.
 - `codex` one-shot defaults to `--dangerously-bypass-approvals-and-sandbox --ephemeral` unless `sandbox` is explicitly provided.
-- Child env sanitization MUST remove `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, and `ANTHROPIC_API_KEY`.
+- Child env sanitization MUST remove `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY`, and all model/endpoint routing vars (`ANTHROPIC_BASE_URL`, `ANTHROPIC_SMALL_FAST_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL`, `API_TIMEOUT_MS`, `ALLMIND_LOCAL_MODEL`, `CLAUDE_CODE_REMOTE`, `ANTHROPIC_DEFAULT_*`) — only the local-model profile may re-set routing, deliberately.
 - Child `SHELL` MUST be forced to pwsh path for Windows automation consistency.
 - Every spawned process MUST be tracked in `.process-ledger.json` (`--ps`, `--audit`, `--purge` workflows depend on this).
 - `--am` reads persona from `P:\software\allmind\config\persona\allmind-voice.md`.
