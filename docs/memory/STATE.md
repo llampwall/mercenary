@@ -4,7 +4,7 @@
 # State
 
 ## Current Objective
-Core implementation complete; env-builder parity work landed. Next: real CI, versioning workflow, remaining Codex integration test coverage.
+Core implementation complete; env-builder parity and routing-var sanitization landed. Next: real CI, versioning workflow, remaining Codex integration test coverage.
 
 ## Active Work
 - None — all recent work committed
@@ -14,6 +14,7 @@ Core implementation complete; env-builder parity work landed. Next: real CI, ver
 - openSession with local model + shell tools blocked by Qg7 sandbox gate on Windows; must route shell work through headless (`run()`)
 
 ## Next Actions
+- [ ] Extend routing-var strip to `sanitizeEnvCodex` and `buildLauncherEnvLines` (only `sanitizeEnv` is covered)
 - [ ] Replace placeholder CI with real test execution (Windows runner)
 - [ ] Define release/versioning workflow for `mercenary` CLI distribution
 - [ ] Add integration tests for Codex backend (MCP disable, sandbox defaults, native exe)
@@ -32,7 +33,7 @@ Core implementation complete; env-builder parity work landed. Next: real CI, ver
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-08-01
-Commits covered through: 2db1eae47c83bc20b4839e71b27b98912d02c517
+Last memory update: 2026-08-02
+Commits covered through: 4566193cd530ead090d1163ad6cae79abd9bac23
 
-<!-- chinvex:last-commit:2db1eae47c83bc20b4839e71b27b98912d02c517 -->
+<!-- chinvex:last-commit:4566193cd530ead090d1163ad6cae79abd9bac23 -->

@@ -4,6 +4,7 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Fixed a leaked `ANTHROPIC_BASE_URL` silently routing every spawned session to the local endpoint — `sanitizeEnv()` now strips the full model/endpoint routing var set, closing the qwen-poisoning class
 - Moved the `ALLMIND_AGENT_SESSION` stamp from per-caller to mercenary's own three env builders (`sanitizeEnv`, `sanitizeEnvCodex`, `buildLauncherEnvLines`) — the process boundary converges where per-caller stamping could not
 - Fixed `opts.env` being silently dropped on the headless claude path; `sanitizeEnv()` now merges it last like `sanitizeEnvCodex` and the interactive builder
 - Extracted `buildLauncherEnvLines` from `openSession()` and exported it alongside `AGENT_SESSION_VAR` so the interactive env block is unit-testable without opening a terminal
@@ -13,6 +14,14 @@
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
 
 ## 2026-08
+
+### 2026-08-02 — Fixed leaked model/endpoint routing vars poisoning spawned sessions
+
+- **Symptom:** Sessions spawned from a parent that had `ANTHROPIC_BASE_URL` set (AllMind's local-model lanes) silently routed to the local endpoint instead of Anthropic — no error, wrong model answering.
+- **Root cause:** `sanitizeEnv()` stripped auth vars (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL`, `CLAUDE_CONFIG_DIR`) but not endpoint/routing vars, so the child inherited whatever routing the parent happened to carry.
+- **Fix:** Strip `ANTHROPIC_BASE_URL`, `ANTHROPIC_SMALL_FAST_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL`, `API_TIMEOUT_MS`, `ALLMIND_LOCAL_MODEL`, `CLAUDE_CODE_REMOTE`, and any `ANTHROPIC_DEFAULT_*` key, mirroring allmind `lib/claude-env.js` MODEL_ROUTING_VARS. Strips run before the local-model profile and the `opts.env` merge, so opting in still re-sets routing deliberately. Last remaining opening of the qwen-poisoning class.
+- **Prevention:** Any env var that steers *where* or *to which model* a request goes belongs in the strip set, not just credential vars. Scope caveat: this covers `sanitizeEnv` only — `sanitizeEnvCodex` and the interactive launcher (`buildLauncherEnvLines`) still pass routing vars through from the parent env.
+- **Evidence:** 4566193
 
 ### 2026-08-01 — Stamp the agent-session marker at mercenary's own env builders
 
