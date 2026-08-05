@@ -31,6 +31,7 @@ coverage/
 # process ledger (runtime state, never committed)
 .process-ledger.json
 .process-ledger.json.tmp
+.process-ledger.json.corrupt-*
 
 # spawn timing log (runtime state, never committed)
 mercenary-timing.jsonl
