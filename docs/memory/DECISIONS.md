@@ -4,6 +4,7 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Retired the win32 local-model no-shell gate in `openSession()` — the Qg7 shell-call crash no longer reproduces on the current CLI, the `allowedTools` override never worked anyway, and the injected warning was stranding compliant qwen-lane sessions on gates they could run
 - Fixed a leaked `ANTHROPIC_BASE_URL` silently routing every spawned session to the local endpoint — `sanitizeEnv()` now strips the full model/endpoint routing var set, closing the qwen-poisoning class
 - Moved the `ALLMIND_AGENT_SESSION` stamp from per-caller to mercenary's own three env builders (`sanitizeEnv`, `sanitizeEnvCodex`, `buildLauncherEnvLines`) — the process boundary converges where per-caller stamping could not
 - Fixed `opts.env` being silently dropped on the headless claude path; `sanitizeEnv()` now merges it last like `sanitizeEnvCodex` and the interactive builder
@@ -14,6 +15,12 @@
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
 
 ## 2026-08
+
+### 2026-08-08 — Retired the win32 local-model no-shell gate in openSession
+
+- **Why:** The 2026-05-08 gate assumed shell tool calls crash under a non-Anthropic `ANTHROPIC_BASE_URL` (Qg7 sandbox gate). On the current Claude Code CLI the crash no longer reproduces: qwen-lane dispatch qwen-1786228741458-921ac9 (2026-08-08) ran git status/add/commit through the PowerShell tool in an interactive local-model session, zero errors. Meanwhile the gate's `allowedTools` override was a no-op all along (`--allowed-tools` is ignored under `--dangerously-skip-permissions`), so its only live effect was the injected "shell will crash the session" prompt — which made compliant sessions strand on work they could do, while non-compliant sessions proved shell works. AllMind's qwen work lane needs sessions that run their own gates and commits.
+- **Impact:** `noShellLocalWindows` removed from `openSession()`: no shell-free `allowedTools` override, no appended no-shell notice. Local-model interactive sessions get the standard toolset. Rollback: revert the retirement commit if a CLI update revives the crash.
+- **Evidence:** live transcript of qwen-1786228741458-921ac9 (sortie commit 958960ab made in-session); retirement commit in this repo
 
 ### 2026-08-02 — Fixed leaked model/endpoint routing vars poisoning spawned sessions
 

@@ -11,7 +11,6 @@ Core implementation complete; env-builder parity and routing-var sanitization la
 
 ## Blockers
 - CI is placeholder-only — reports green without running tests
-- openSession with local model + shell tools blocked by Qg7 sandbox gate on Windows; must route shell work through headless (`run()`)
 
 ## Next Actions
 - [ ] Extend routing-var strip to `sanitizeEnvCodex` and `buildLauncherEnvLines` (only `sanitizeEnv` is covered)
