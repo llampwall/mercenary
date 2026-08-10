@@ -33,6 +33,6 @@ Core implementation complete; env-builder parity and routing-var sanitization la
 
 ---
 Last memory update: 2026-08-09
-Commits covered through: 6da853a43249a966927f79e42b48653b143cdc2c
+Commits covered through: ab061c6ccf84c192e673003a3a2eccbfe2b07f99
 
-<!-- chinvex:last-commit:6da853a43249a966927f79e42b48653b143cdc2c -->
+<!-- chinvex:last-commit:ab061c6ccf84c192e673003a3a2eccbfe2b07f99 -->
