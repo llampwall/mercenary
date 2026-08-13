@@ -32,7 +32,7 @@ Core implementation complete; env-builder parity and routing-var sanitization la
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-08-12
-Commits covered through: dbf8a73d140144455d91169949d01ce99922c8e1
+Last memory update: 2026-08-13
+Commits covered through: f24fd9c43bbababc60df55e8ee534ade0c0422d0
 
-<!-- chinvex:last-commit:dbf8a73d140144455d91169949d01ce99922c8e1 -->
+<!-- chinvex:last-commit:f24fd9c43bbababc60df55e8ee534ade0c0422d0 -->
