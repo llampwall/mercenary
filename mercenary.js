@@ -653,8 +653,13 @@ function loadPersona(personaPath) {
 
 function buildArgs(opts) {
   const args = [];
+  // opts.settingsPath: caller-supplied --settings override file (e.g. a smaller
+  // autoCompactWindow for a model tier). The local-model profile carries its own
+  // settings file, so the two are mutually exclusive — one --settings per spawn.
   if (isLocalModelEnabled(opts)) {
     args.push('--settings', getLocalModelSettingsPath(opts));
+  } else if (opts.settingsPath) {
+    args.push('--settings', opts.settingsPath);
   }
   args.push('--dangerously-skip-permissions', '--no-session-persistence');
 
@@ -1129,6 +1134,8 @@ async function openSession(opts = {}) {
   const claudeArgs = [`& "${claudePath}"`];
   if (localModelProfile) {
     claudeArgs.push(`--settings "${escapePowerShellString(getLocalModelSettingsPath(opts))}"`);
+  } else if (opts.settingsPath) {
+    claudeArgs.push(`--settings "${escapePowerShellString(opts.settingsPath)}"`);
   }
   claudeArgs.push('--dangerously-skip-permissions');
 
@@ -1334,6 +1341,8 @@ async function openHeadlessSession(opts = {}) {
   const args = [];
   if (isLocalModelEnabled(opts)) {
     args.push('--settings', getLocalModelSettingsPath(opts));
+  } else if (opts.settingsPath) {
+    args.push('--settings', opts.settingsPath);
   }
   args.push('--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose');
 
