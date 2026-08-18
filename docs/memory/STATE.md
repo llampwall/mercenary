@@ -32,7 +32,7 @@ Core implementation complete; per-spawn settings override and local-model compac
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-08-17
-Commits covered through: ae41ee1470c2c01b018a63dd0177ed03bf25ca0f
+Last memory update: 2026-08-18
+Commits covered through: 9f61c4228d00906b25827f728d69c42ff195a01a
 
-<!-- chinvex:last-commit:ae41ee1470c2c01b018a63dd0177ed03bf25ca0f -->
+<!-- chinvex:last-commit:9f61c4228d00906b25827f728d69c42ff195a01a -->
