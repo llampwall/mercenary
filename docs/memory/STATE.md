@@ -4,7 +4,7 @@
 # State
 
 ## Current Objective
-Core implementation complete; env-builder parity and routing-var sanitization landed. Next: real CI, versioning workflow, remaining Codex integration test coverage.
+Core implementation complete; per-spawn settings override and local-model compaction window landed. Next: real CI, versioning workflow, remaining Codex integration test coverage.
 
 ## Active Work
 - None — all recent work committed
@@ -32,7 +32,7 @@ Core implementation complete; env-builder parity and routing-var sanitization la
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-08-15
-Commits covered through: 9c267c289285603804c3b04ed2ca08d97b7e87d4
+Last memory update: 2026-08-17
+Commits covered through: ae41ee1470c2c01b018a63dd0177ed03bf25ca0f
 
-<!-- chinvex:last-commit:9c267c289285603804c3b04ed2ca08d97b7e87d4 -->
+<!-- chinvex:last-commit:ae41ee1470c2c01b018a63dd0177ed03bf25ca0f -->

@@ -4,6 +4,8 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Set `autoCompactWindow: 125000` in the local-model settings file so qwen sessions compact before overflowing the 131k rig context instead of dying at the stock 500k global window
+- Added `opts.settingsPath` — a per-spawn `--settings` override wired at all three arg builders, mutually exclusive with the local-model profile's settings file
 - Retired the win32 local-model no-shell gate in `openSession()` — the Qg7 shell-call crash no longer reproduces on the current CLI, the `allowedTools` override never worked anyway, and the injected warning was stranding compliant qwen-lane sessions on gates they could run
 - Fixed a leaked `ANTHROPIC_BASE_URL` silently routing every spawned session to the local endpoint — `sanitizeEnv()` now strips the full model/endpoint routing var set, closing the qwen-poisoning class
 - Moved the `ALLMIND_AGENT_SESSION` stamp from per-caller to mercenary's own three env builders (`sanitizeEnv`, `sanitizeEnvCodex`, `buildLauncherEnvLines`) — the process boundary converges where per-caller stamping could not
@@ -15,6 +17,18 @@
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
 
 ## 2026-08
+
+### 2026-08-17 — Compact local-model sessions at 125k
+
+- **Why:** The stock global `autoCompactWindow` is 500k, so a qwen session hit the rig's 131k context ceiling and died before compaction ever triggered. The local-model settings file already rides every local spawn via `--settings`, so the window lands with zero code change.
+- **Impact:** `data/claude-local-model-settings.json` gains `"autoCompactWindow": 125000`. Applies to every local-model spawn, and only on the next spawn — the child CLI reads the file at start, so running sessions keep the old window.
+- **Evidence:** ae41ee1
+
+### 2026-08-17 — Added opts.settingsPath as a per-spawn --settings override
+
+- **Why:** Callers need to hand an individual spawn a Claude Code settings file (e.g. a smaller `autoCompactWindow` for a specific model tier) without touching the global config or the local-model profile.
+- **Impact:** `opts.settingsPath` wired at all three arg builders — `buildArgs` (one-shot), the `openSession()` interactive launcher (PowerShell-escaped), and `openHeadlessSession()`. Only one `--settings` per spawn is legal, so it is an `else if` behind the local-model profile's own settings file: local-model wins when both are present.
+- **Evidence:** 51f1b40
 
 ### 2026-08-08 — Retired the win32 local-model no-shell gate in openSession
 
