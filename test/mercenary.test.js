@@ -993,3 +993,54 @@ describe('run() timeout path', () => {
     }
   });
 });
+
+// =============================================================================
+// codex interactive launcher — developer instructions must never ride argv
+// =============================================================================
+
+describe('openSession codex launcher instructions delivery', () => {
+  it('delivers oversized developer instructions via a profile file, not the command line', async () => {
+    // Windows CreateProcess caps a command line at 32,767 chars. 2026-08-19:
+    // spawn-1787143847248 passed 38.6k of injected instructions as a --config
+    // argv and died before codex started, with a null $LASTEXITCODE. This
+    // pins the profile-file delivery path and the defaulted exit-code hook.
+    const codexHome = mkdtempSync(join(tmpdir(), 'merc-codex-home-'));
+    const origCodexHome = process.env.CODEX_HOME;
+    const origCodexPath = process.env.CODEX_PATH;
+    const bigInstructions = 'INSTRUCTION-BLOCK '.repeat(2500); // ~45k chars
+    try {
+      process.env.CODEX_HOME = codexHome;
+      process.env.CODEX_PATH = process.execPath;
+      let captured = null;
+      await openSession({
+        backend: 'codex',
+        cwd: tmpdir(),
+        appendSystemPrompt: bigInstructions,
+        initialMessage: 'begin',
+        dispatchId: 'spawn-test-profile',
+        purpose: 'test', origin: 'mercenary-test',
+        launch: async (ctx) => { captured = ctx; return { pid: null }; },
+      });
+      assert.ok(captured?.launcherPath, 'stub launch callback should receive launcherPath');
+      const script = readFileSync(captured.launcherPath, 'utf8');
+      assert.ok(!script.includes(bigInstructions.slice(0, 100)),
+        'instruction content must not appear inline in the launcher script');
+      const profileMatch = script.match(/--profile[\s`]+"(merc-[A-Za-z0-9_-]+)"/);
+      assert.ok(profileMatch, 'codex invocation should carry --profile "merc-<session>"');
+      const profileFile = join(codexHome, `${profileMatch[1]}.config.toml`);
+      assert.ok(existsSync(profileFile), `profile file should exist at ${profileFile}`);
+      const toml = readFileSync(profileFile, 'utf8');
+      assert.ok(toml.startsWith("developer_instructions = '''"), 'profile carries developer_instructions as TOML literal multiline');
+      assert.ok(toml.includes(bigInstructions.slice(0, 100)), 'profile file carries the instruction content');
+      assert.ok(script.includes(`Remove-Item "${profileFile}"`), 'launcher should clean the profile up after exit');
+      assert.ok(script.includes('$mercExitCode = if ($null -eq $LASTEXITCODE) { -1 }'),
+        'exit code must be defaulted so a failed launch still posts valid JSON');
+      assert.ok(script.includes('"exit_code":\' + $mercExitCode'), 'exit hook uses the defaulted exit code');
+    } finally {
+      if (origCodexHome != null) process.env.CODEX_HOME = origCodexHome;
+      else delete process.env.CODEX_HOME;
+      if (origCodexPath != null) process.env.CODEX_PATH = origCodexPath;
+      else delete process.env.CODEX_PATH;
+    }
+  });
+});

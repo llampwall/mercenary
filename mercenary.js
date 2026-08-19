@@ -5,8 +5,8 @@
 
 import { spawn, execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, appendFileSync, mkdtempSync, existsSync, renameSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
+import { dirname, join, resolve, basename } from 'node:path';
+import { tmpdir, homedir } from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const ALLMIND_PERSONA_PATH = 'P:\\software\\allmind\\config\\persona\\allmind-voice.md';
@@ -1008,6 +1008,7 @@ function run(opts = {}) {
 async function finishInteractiveLauncher({
   lines, invocationArgs, opts, title, tmpBase,
   backend, binaryPath, label, childImage, launcherName,
+  postExitLines = [],
 }) {
   // Report the REAL agent PID to the AllMind process ledger so liveness tracking follows
   // the agent process, not the wt.exe launcher. openSession returns proc.pid = the
@@ -1035,7 +1036,16 @@ async function finishInteractiveLauncher({
   }
 
   lines.push(invocationArgs.join(' `\n  '));
-  lines.push(`Write-Host "[mercenary] ${label} exited with code $LASTEXITCODE" -ForegroundColor DarkGray`);
+  // $LASTEXITCODE is NULL when the launch itself failed (e.g. CreateProcess
+  // refused an over-long command line) — no native command ever ran. Capture a
+  // defaulted copy so the exit hook posts valid JSON either way; -1 marks
+  // "never launched" and is distinguishable from every real exit code.
+  lines.push('$mercExitCode = if ($null -eq $LASTEXITCODE) { -1 } else { $LASTEXITCODE }');
+  lines.push(`Write-Host "[mercenary] ${label} exited with code $mercExitCode" -ForegroundColor DarkGray`);
+
+  // Session-scoped cleanup (e.g. the codex profile file) — after the agent
+  // exits, before the exit hook. Cmdlets here cannot disturb $mercExitCode.
+  for (const cleanupLine of postExitLines) lines.push(cleanupLine);
 
   // Exit hook — phone home to AllMind with exit code so dead sessions are detected.
   // The dispatch_id is baked in at generation time; if not provided, skip the hook.
@@ -1046,9 +1056,9 @@ async function finishInteractiveLauncher({
     lines.push('');
     lines.push('# Exit hook — report session exit to AllMind');
     lines.push('try {');
-    lines.push(`  $exitBody = '{"event_type":"mercenary_session_exit","summary":"Session exited with code ' + $LASTEXITCODE + '","details":{"dispatch_id":"${safeDispatchId}","exit_code":' + $LASTEXITCODE + '${threadPart}}}'`);
+    lines.push(`  $exitBody = '{"event_type":"mercenary_session_exit","summary":"Session exited with code ' + $mercExitCode + '","details":{"dispatch_id":"${safeDispatchId}","exit_code":' + $mercExitCode + '${threadPart}}}'`);
     lines.push('  curl.exe -s -X POST http://localhost:7780/api/internal/event -H "Content-Type: application/json" -d $exitBody | Out-Null');
-    lines.push('  Write-Host "[mercenary] Exit hook sent (code $LASTEXITCODE)" -ForegroundColor DarkGray');
+    lines.push('  Write-Host "[mercenary] Exit hook sent (code $mercExitCode)" -ForegroundColor DarkGray');
     lines.push('} catch {');
     lines.push('  Write-Host "[mercenary] Exit hook failed: $_" -ForegroundColor DarkGray');
     lines.push('}');
@@ -1117,6 +1127,7 @@ async function openSessionCodex(opts, title, tmpBase) {
   }
 
   const codexArgs = [`& "${codexPath}"`];
+  const postExitLines = [];
   if (opts.model) codexArgs.push(`-m "${opts.model}"`);
 
   // Role-based presets for codex interactive sessions.
@@ -1142,7 +1153,13 @@ async function openSessionCodex(opts, title, tmpBase) {
   }
   if (opts.role === 'allmind') codexArgs.push('--config', 'personality=pragmatic');
 
-  // Persona + appendSystemPrompt as developer_instructions (write to temp file)
+  // Persona + appendSystemPrompt as developer_instructions, delivered via a
+  // per-session codex PROFILE file, never argv. The injected instruction block
+  // runs tens of KB and Windows caps a process command line at 32,767 chars, so
+  // `--config developer_instructions=<content>` fails at CreateProcess before
+  // codex ever starts (2026-08-19: spawn-1787143847248 died exactly this way).
+  // `--profile <name>` layers $CODEX_HOME/<name>.config.toml onto the base
+  // config, and a TOML literal multi-line string carries any size.
   const sessionPersona = opts.persona || (opts.role === 'allmind' ? ALLMIND_PERSONA_PATH : null);
   let developerInstructions = '';
   if (sessionPersona) {
@@ -1155,9 +1172,17 @@ async function openSessionCodex(opts, title, tmpBase) {
   if (developerInstructions) {
     const instrFile = join(tmpBase, 'developer-instructions.txt');
     writeFileSync(instrFile, developerInstructions, 'utf8');
-    lines.push(`$diContent = Get-Content "${instrFile}" -Raw`);
-    lines.push('Write-Host "[mercenary] Developer instructions: $($diContent.Length) chars" -ForegroundColor DarkGray');
-    codexArgs.push('--config "developer_instructions=$diContent"');
+    // TOML literal multi-line strings take no escapes but cannot contain the
+    // ''' delimiter; break any occurrence rather than corrupting the file.
+    const tomlSafe = developerInstructions.replace(/'''/g, "'' '");
+    const profileName = `merc-${basename(tmpBase).replace(/[^A-Za-z0-9_-]/g, '')}`;
+    const codexHome = process.env.CODEX_HOME || join(homedir(), '.codex');
+    const profilePath = join(codexHome, `${profileName}.config.toml`);
+    writeFileSync(profilePath, `developer_instructions = '''\n${tomlSafe}\n'''\n`, 'utf8');
+    lines.push(`Write-Host "[mercenary] Developer instructions: ${developerInstructions.length} chars via profile ${profileName}" -ForegroundColor DarkGray`);
+    codexArgs.push('--profile', `"${profileName}"`);
+    // The launcher owns the profile's lifetime: remove it after codex exits.
+    postExitLines.push(`Remove-Item "${profilePath}" -Force -ErrorAction SilentlyContinue`);
   }
 
   // Initial message via temp file → PS variable — see the claude launcher's
@@ -1182,6 +1207,7 @@ async function openSessionCodex(opts, title, tmpBase) {
     label: 'Codex',
     childImage: 'codex',
     launcherName: 'launcher-codex.ps1',
+    postExitLines,
   });
 }
 
