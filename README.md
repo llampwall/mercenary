@@ -208,16 +208,35 @@ const session = await openSession({
   model: 'claude-sonnet-4-6',
   role: 'coordinator',           // see Roles below
   systemPrompt: 'You are...',    // claude only; string (not path)
-  appendSystemPrompt: '...',     // claude only
-  persona: 'C:/path/persona.md', // claude only
+  appendSystemPrompt: '...',     // claude: --append-system-prompt-file; codex: developer_instructions
+  persona: 'C:/path/persona.md', // claude: --append-system-prompt-file; codex: developer_instructions
   allowedTools: 'Bash,Read',     // claude only (overrides role default)
   strictMcp: false,              // claude only; default false — do NOT set true for interactive
   mcpConfig: 'C:/path/mcp.json', // claude only
   maxTokens: 65536,              // claude only
+  env: { MY_VAR: 'x' },          // extra $env: assignments baked into the launcher
+  dispatchId: 'disp-123',        // enables the PID phone-home + exit hook (see below)
+  launch: async (ctx) => ({...}),// host the launcher somewhere other than wt.exe (see below)
 });
-// session.pid  — PID of the Windows Terminal process
+// session.pid  — PID of the Windows Terminal process, or whatever `launch` returned
 // session.launcherPath — path to the generated .ps1 launcher script
 ```
+
+**The launcher tail is shared by both backends.** Whatever the backend, the generated script gets
+the same env block (`buildLauncherEnvLines`), the same optional PID phone-home and exit hook, and
+the same launch strategy. The only per-backend differences are the binary, its argument mapping,
+and the launcher filename.
+
+- `env` entries become `$env:` assignments in the launcher, so the agent process inherits them.
+- `dispatchId` turns on two best-effort HTTP callbacks to a local AllMind instance: a background
+  job that finds the real agent child and POSTs its PID (the returned `pid` is the `wt.exe` client,
+  which exits within seconds and is useless for liveness), and an exit hook reporting the exit code.
+  Omit it and neither is emitted.
+- `launch(ctx)` overrides where the launcher runs. It receives
+  `{ launcherPath, title, cwd, pwsh }` and must return at least `{ pid }` (`null` is fine when the
+  real PID arrives via the phone-home). Any extra fields it returns are merged into the resolved
+  session object, which is how a caller hosting the launcher in a terminal multiplexer gets its
+  pane identifiers back. Omitted, mercenary spawns a Windows Terminal tab as before.
 
 ### `treeKill(pid)`
 

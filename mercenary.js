@@ -980,6 +980,120 @@ function run(opts = {}) {
 
 // --- Interactive Mode ---
 
+/**
+ * The tail every interactive launcher shares, whatever the backend: the real-child PID
+ * phone-home, the invocation line, the exit hook, the launcher write, and the launch
+ * strategy (a caller-supplied host such as a Herdr pane, else a loose wt.exe window).
+ *
+ * EXTRACTED 2026-08-19, and the extraction is the point. openSessionCodex was written as a
+ * parallel copy of the claude launcher and then silently missed every feature the claude
+ * one grew afterwards: the opts.launch hook (so a codex dispatch could never be hosted in
+ * a Herdr pane — AllMind sets the callback for every interactive dispatch and the codex
+ * branch dropped it), the ledger PID phone-home, and the exit hook. One tail means the
+ * next feature lands on both backends or neither.
+ *
+ * @param {Object} args
+ * @param {string[]} args.lines - launcher lines so far; the tail is appended to these
+ * @param {string[]} args.invocationArgs - the CLI invocation, one arg per entry
+ * @param {Object} args.opts - the openSession options
+ * @param {string} args.title - terminal/tab title
+ * @param {string} args.tmpBase - temp dir holding this session's generated files
+ * @param {string} args.backend - 'claude' | 'codex', for the ledger row
+ * @param {string} args.binaryPath - resolved CLI path, for the ledger row
+ * @param {string} args.label - human label in launcher output ("Claude" / "Codex")
+ * @param {string} args.childImage - process-name prefix of the real agent child
+ * @param {string} args.launcherName - filename for the generated launcher script
+ * @returns {Promise<Object>} { pid, title, launcherPath, ...(launch callback extras) }
+ */
+async function finishInteractiveLauncher({
+  lines, invocationArgs, opts, title, tmpBase,
+  backend, binaryPath, label, childImage, launcherName,
+}) {
+  // Report the REAL agent PID to the AllMind process ledger so liveness tracking follows
+  // the agent process, not the wt.exe launcher. openSession returns proc.pid = the
+  // `wt -w 0 nt` client, which hands off to the existing Windows Terminal and exits within
+  // seconds — useless for liveness. The agent is launched just below as a direct child of
+  // THIS launcher pwsh, so a background job finds it and POSTs its PID to
+  // /api/internal/ledger/update-pid. Best-effort: on any failure the ledger keeps the
+  // launcher PID (prior behavior).
+  if (opts.dispatchId) {
+    const safeLedgerDispatchId = opts.dispatchId.replace(/"/g, '');
+    lines.push(`# Phone the real ${childImage}.exe PID home to the AllMind ledger (best-effort)`);
+    lines.push('$allmindLauncherPid = $PID');
+    lines.push('Start-Job -ScriptBlock {');
+    lines.push('  param($lpid)');
+    lines.push('  for ($i = 0; $i -lt 24; $i++) {');
+    lines.push('    Start-Sleep -Milliseconds 750');
+    lines.push(`    try { $kid = Get-CimInstance Win32_Process -Filter "ParentProcessId=$lpid" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "${childImage}*" } | Select-Object -First 1 } catch { $kid = $null }`);
+    lines.push('    if ($kid) {');
+    lines.push(`      $body = '{"dispatch_id":"${safeLedgerDispatchId}","pid":' + $kid.ProcessId + '}'`);
+    lines.push('      try { curl.exe -s -X POST http://localhost:7780/api/internal/ledger/update-pid -H "Content-Type: application/json" -d $body | Out-Null } catch {}');
+    lines.push('      break');
+    lines.push('    }');
+    lines.push('  }');
+    lines.push('} -ArgumentList $allmindLauncherPid | Out-Null');
+  }
+
+  lines.push(invocationArgs.join(' `\n  '));
+  lines.push(`Write-Host "[mercenary] ${label} exited with code $LASTEXITCODE" -ForegroundColor DarkGray`);
+
+  // Exit hook — phone home to AllMind with exit code so dead sessions are detected.
+  // The dispatch_id is baked in at generation time; if not provided, skip the hook.
+  if (opts.dispatchId) {
+    const safeDispatchId = opts.dispatchId.replace(/"/g, '');
+    const safeThreadId = (opts.env?.ALLMIND_ORIGIN_THREAD_ID || '').replace(/"/g, '');
+    const threadPart = safeThreadId ? `,"thread_id":"${safeThreadId}"` : '';
+    lines.push('');
+    lines.push('# Exit hook — report session exit to AllMind');
+    lines.push('try {');
+    lines.push(`  $exitBody = '{"event_type":"mercenary_session_exit","summary":"Session exited with code ' + $LASTEXITCODE + '","details":{"dispatch_id":"${safeDispatchId}","exit_code":' + $LASTEXITCODE + '${threadPart}}}'`);
+    lines.push('  curl.exe -s -X POST http://localhost:7780/api/internal/event -H "Content-Type: application/json" -d $exitBody | Out-Null');
+    lines.push('  Write-Host "[mercenary] Exit hook sent (code $LASTEXITCODE)" -ForegroundColor DarkGray');
+    lines.push('} catch {');
+    lines.push('  Write-Host "[mercenary] Exit hook failed: $_" -ForegroundColor DarkGray');
+    lines.push('}');
+  }
+
+  const launcherPath = join(tmpBase, launcherName);
+  writeFileSync(launcherPath, lines.join('\n'), 'utf8');
+
+  // Launch strategy. A caller may supply opts.launch(ctx) to host the generated
+  // launcher somewhere other than a loose Windows Terminal window (e.g. a Herdr
+  // pane). The launcher script and its env are identical regardless of host —
+  // only where it runs changes. When absent (the default), spawn wt.exe exactly
+  // as before. The callback receives the launcher path + resolved pwsh and must
+  // return at least { pid } (may be null when the real PID is phoned home later,
+  // as the launcher's Start-Job does); any extra fields it returns (pane_id,
+  // tab_id, …) are merged into openSession's return value for the caller.
+  if (typeof opts.launch === 'function') {
+    const launched = await opts.launch({
+      launcherPath,
+      title,
+      cwd: opts.cwd || null,
+      pwsh: resolveInteractivePwsh(),
+    });
+    return { pid: launched?.pid ?? null, title, launcherPath, ...(launched || {}) };
+  }
+
+  // Spawn Windows Terminal — pass cwd as -d so the tab opens in the right directory
+  const wtArgs = ['-w', '0', 'nt', '--title', title];
+  if (opts.cwd) wtArgs.push('-d', opts.cwd);
+  wtArgs.push(resolveInteractivePwsh(), '-NoProfile', '-NoExit', '-File', launcherPath);
+
+  const proc = spawn('wt', wtArgs, {
+    detached: true,
+    stdio: 'ignore',
+    shell: false,
+    windowsHide: false
+  });
+  proc.unref();
+  try {
+    ledgerRegister({ pid: proc.pid, backend, mode: 'interactive', binaryPath, cwd: opts.cwd, purpose: opts.purpose, origin: opts.origin });
+  } catch { /* ledger failure must not break spawning */ }
+
+  return { pid: proc.pid, title, launcherPath };
+}
+
 async function openSessionCodex(opts, title, tmpBase) {
   const codexPath = resolveCodexPath();
 
@@ -987,14 +1101,15 @@ async function openSessionCodex(opts, title, tmpBase) {
     '# Mercenary codex launcher -- auto-generated',
     '$ErrorActionPreference = "Continue"',
     'Write-Host "[mercenary] Codex launcher started" -ForegroundColor DarkGray',
-    '$env:CLAUDECODE = $null',
-    '$env:CLAUDE_CODE_ENTRYPOINT = $null',
-    '$env:ANTHROPIC_API_KEY = $null',
-    '$env:ANTHROPIC_AUTH_TOKEN = $null',
-    '$env:ANTHROPIC_MODEL = $null',
-    '$env:CLAUDE_CODE_USE_POWERSHELL_TOOL = "1"',
-    '$env:CLAUDE_CODE_REMOTE = "1"',
-    '$env:SHELL = "C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe"',
+    // The SAME env builder the claude launcher uses. This was a literal copy of that
+    // function's first eight lines, so it silently missed everything the function appends
+    // after them: ALLMIND_DISPATCH_ID, the caller's opts.env (where the per-dispatch
+    // ALLMIND_COMPLETION_TOKEN and the origin thread ids ride), and the §17
+    // ALLMIND_AGENT_SESSION marker. A codex session therefore could not post a completion
+    // record and was not covered by the ignition restart refusal. Local-model routing is a
+    // claude-CLI mechanism and never applies here, so the profile args stay at their
+    // defaults; CLAUDE_CODE_MAX_OUTPUT_TOKENS comes along and is inert for codex.
+    ...buildLauncherEnvLines(opts),
   ];
 
   if (opts.cwd) {
@@ -1055,28 +1170,19 @@ async function openSessionCodex(opts, title, tmpBase) {
   }
 
   lines.push('Write-Host "[mercenary] Launching codex..." -ForegroundColor DarkGray');
-  lines.push(codexArgs.join(' `\n  '));
-  lines.push('Write-Host "[mercenary] Codex exited with code $LASTEXITCODE" -ForegroundColor DarkGray');
 
-  const launcherPath = join(tmpBase, 'launcher-codex.ps1');
-  writeFileSync(launcherPath, lines.join('\n'), 'utf8');
-
-  const wtArgs = ['-w', '0', 'nt', '--title', title];
-  if (opts.cwd) wtArgs.push('-d', opts.cwd);
-  wtArgs.push(resolveInteractivePwsh(), '-NoProfile', '-NoExit', '-File', launcherPath);
-
-  const proc = spawn('wt', wtArgs, {
-    detached: true,
-    stdio: 'ignore',
-    shell: false,
-    windowsHide: false
+  return finishInteractiveLauncher({
+    lines,
+    invocationArgs: codexArgs,
+    opts,
+    title,
+    tmpBase,
+    backend: 'codex',
+    binaryPath: codexPath,
+    label: 'Codex',
+    childImage: 'codex',
+    launcherName: 'launcher-codex.ps1',
   });
-  proc.unref();
-  try {
-    ledgerRegister({ pid: proc.pid, backend: 'codex', mode: 'interactive', binaryPath: codexPath, cwd: opts.cwd, purpose: opts.purpose, origin: opts.origin });
-  } catch { /* ledger failure must not break spawning */ }
-
-  return { pid: proc.pid, title, launcherPath };
 }
 
 async function openSession(opts = {}) {
@@ -1227,89 +1333,18 @@ async function openSession(opts = {}) {
   lines.push('Write-Host ("  CLAUDE_CODE_ENTRYPOINT=" + $env:CLAUDE_CODE_ENTRYPOINT) -ForegroundColor Yellow');
   lines.push('Write-Host "[mercenary][DEBUG] -------------" -ForegroundColor Yellow');
 
-  // Report the REAL claude.exe PID to the AllMind process ledger so liveness
-  // tracking follows the Claude process, not the wt.exe launcher. openSession
-  // returns proc.pid = the `wt -w 0 nt` client, which hands off to the existing
-  // Windows Terminal and exits within seconds — useless for liveness. claude.exe
-  // is launched just below as a direct child of THIS launcher pwsh, so a
-  // background job finds it and POSTs its PID to /api/internal/ledger/update-pid.
-  // Best-effort: on any failure the ledger keeps the launcher PID (prior behavior).
-  if (opts.dispatchId) {
-    const safeLedgerDispatchId = opts.dispatchId.replace(/"/g, '');
-    lines.push('# Phone the real claude.exe PID home to the AllMind ledger (best-effort)');
-    lines.push('$allmindLauncherPid = $PID');
-    lines.push('Start-Job -ScriptBlock {');
-    lines.push('  param($lpid)');
-    lines.push('  for ($i = 0; $i -lt 24; $i++) {');
-    lines.push('    Start-Sleep -Milliseconds 750');
-    lines.push('    try { $kid = Get-CimInstance Win32_Process -Filter "ParentProcessId=$lpid" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "claude*" } | Select-Object -First 1 } catch { $kid = $null }');
-    lines.push('    if ($kid) {');
-    lines.push(`      $body = '{"dispatch_id":"${safeLedgerDispatchId}","pid":' + $kid.ProcessId + '}'`);
-    lines.push('      try { curl.exe -s -X POST http://localhost:7780/api/internal/ledger/update-pid -H "Content-Type: application/json" -d $body | Out-Null } catch {}');
-    lines.push('      break');
-    lines.push('    }');
-    lines.push('  }');
-    lines.push('} -ArgumentList $allmindLauncherPid | Out-Null');
-  }
-
-  lines.push(claudeArgs.join(' `\n  '));
-  lines.push('Write-Host "[mercenary] Claude exited with code $LASTEXITCODE" -ForegroundColor DarkGray');
-
-  // Exit hook — phone home to AllMind with exit code so dead sessions are detected.
-  // The dispatch_id is baked in at generation time; if not provided, skip the hook.
-  if (opts.dispatchId) {
-    const safeDispatchId = opts.dispatchId.replace(/"/g, '');
-    const safeThreadId = (opts.env?.ALLMIND_ORIGIN_THREAD_ID || '').replace(/"/g, '');
-    const threadPart = safeThreadId ? `,"thread_id":"${safeThreadId}"` : '';
-    lines.push('');
-    lines.push('# Exit hook — report session exit to AllMind');
-    lines.push('try {');
-    lines.push(`  $exitBody = '{"event_type":"mercenary_session_exit","summary":"Session exited with code ' + $LASTEXITCODE + '","details":{"dispatch_id":"${safeDispatchId}","exit_code":' + $LASTEXITCODE + '${threadPart}}}'`);
-    lines.push('  curl.exe -s -X POST http://localhost:7780/api/internal/event -H "Content-Type: application/json" -d $exitBody | Out-Null');
-    lines.push('  Write-Host "[mercenary] Exit hook sent (code $LASTEXITCODE)" -ForegroundColor DarkGray');
-    lines.push('} catch {');
-    lines.push('  Write-Host "[mercenary] Exit hook failed: $_" -ForegroundColor DarkGray');
-    lines.push('}');
-  }
-
-  const launcherPath = join(tmpBase, 'launcher.ps1');
-  writeFileSync(launcherPath, lines.join('\n'), 'utf8');
-
-  // Launch strategy. A caller may supply opts.launch(ctx) to host the generated
-  // launcher somewhere other than a loose Windows Terminal window (e.g. a Herdr
-  // pane). The launcher script and its env are identical regardless of host —
-  // only where it runs changes. When absent (the default), spawn wt.exe exactly
-  // as before. The callback receives the launcher path + resolved pwsh and must
-  // return at least { pid } (may be null when the real PID is phoned home later,
-  // as the launcher's Start-Job does); any extra fields it returns (pane_id,
-  // tab_id, …) are merged into openSession's return value for the caller.
-  if (typeof opts.launch === 'function') {
-    const launched = await opts.launch({
-      launcherPath,
-      title,
-      cwd: opts.cwd || null,
-      pwsh: resolveInteractivePwsh(),
-    });
-    return { pid: launched?.pid ?? null, title, launcherPath, ...(launched || {}) };
-  }
-
-  // Spawn Windows Terminal — pass cwd as -d so the tab opens in the right directory
-  const wtArgs = ['-w', '0', 'nt', '--title', title];
-  if (opts.cwd) wtArgs.push('-d', opts.cwd);
-  wtArgs.push(resolveInteractivePwsh(), '-NoProfile', '-NoExit', '-File', launcherPath);
-
-  const proc = spawn('wt', wtArgs, {
-    detached: true,
-    stdio: 'ignore',
-    shell: false,
-    windowsHide: false
+  return finishInteractiveLauncher({
+    lines,
+    invocationArgs: claudeArgs,
+    opts,
+    title,
+    tmpBase,
+    backend: 'claude',
+    binaryPath: claudePath,
+    label: 'Claude',
+    childImage: 'claude',
+    launcherName: 'launcher.ps1',
   });
-  proc.unref();
-  try {
-    ledgerRegister({ pid: proc.pid, backend: 'claude', mode: 'interactive', binaryPath: claudePath, cwd: opts.cwd, purpose: opts.purpose, origin: opts.origin });
-  } catch { /* ledger failure must not break spawning */ }
-
-  return { pid: proc.pid, title, launcherPath };
 }
 
 // --- Headless Persistent Session Mode ---
