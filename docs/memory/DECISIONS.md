@@ -4,6 +4,10 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Bounded qwen compaction: a PreCompact hook supplying barebones custom instructions, `precomputeCompactionEnabled: false`, and a 16K output ceiling replacing the Anthropic-scale 65536 — one measured auto-compaction was costing 6+ minutes of build wall-clock
+- Gave interactive codex sessions the same approval-policy contract as one-shot; without it codex's default `on-request` stalled dispatched sessions waiting on a human
+- Moved codex `developer_instructions` off argv onto a per-session codex profile file — the ~38k-char block was failing at CreateProcess against the Windows 32,767 command-line cap
+- Collapsed the duplicated codex interactive launcher into the shared `finishInteractiveLauncher` tail, restoring `opts.launch`, the ledger PID phone-home, the exit hook, and the full env block on the codex backend
 - Set `autoCompactWindow: 125000` in the local-model settings file so qwen sessions compact before overflowing the 131k rig context instead of dying at the stock 500k global window
 - Added `opts.settingsPath` — a per-spawn `--settings` override wired at all three arg builders, mutually exclusive with the local-model profile's settings file
 - Retired the win32 local-model no-shell gate in `openSession()` — the Qg7 shell-call crash no longer reproduces on the current CLI, the `allowedTools` override never worked anyway, and the injected warning was stranding compliant qwen-lane sessions on gates they could run
@@ -17,6 +21,34 @@
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
 
 ## 2026-08
+
+### 2026-08-19 — Made qwen compaction barebones and bounded its output
+
+- **Why:** Measured on the rig during a live qwen build: one auto-compaction cost ~135s of prefill (92,806 tokens reprocessed at 685 tok/s, `n_prompt_tokens_cache` 0) plus 5,548+ generated tokens at ~30 tok/s — six-plus minutes of build wall-clock. The slot showed `n_predict 65536`; nothing bounded the summary but the model's own stopping.
+- **Impact:** Three changes, all scoped to local-model spawns via the `--settings` file. (1) A `PreCompact` hook (`hooks/precompact-qwen-barebones.mjs`) whose stdout becomes the compaction's custom instructions — keep the task/checklist/last error, drop code and transcripts. Custom instructions are appended to the built-in template, not substituted, so the analysis/summary scaffold still arrives; the hook makes each section terse but cannot delete one. (2) `precomputeCompactionEnabled: false` — on a single-slot rig a background precompute is a second request that evicts the live conversation's KV cache. (3) `CLAUDE_CODE_MAX_OUTPUT_TOKENS=16384` in `sanitizeEnv()`'s local-model branch, still ~9 minutes of generation at the ceiling; a caller's explicit `opts.maxTokens` still wins.
+- **Evidence:** c85417b
+
+### 2026-08-19 — Interactive codex sessions get the one-shot approval contract
+
+- **Symptom:** A dispatched codex interactive session stalled, asking a human to approve every action (second codex review launch, 2026-08-19).
+- **Root cause:** `openSessionCodex` pushed a `--sandbox` but never an approval policy, so codex fell back to its default `approval_policy = on-request`. `buildCodexArgs` (one-shot) had always set one; the interactive path forked before that.
+- **Fix:** Mirror the one-shot contract — sandboxed sessions get `--sandbox <s> --config approval_policy="never"`, unsandboxed dispatched sessions get `--dangerously-bypass-approvals-and-sandbox`.
+- **Prevention:** A sandbox flag alone is not a complete non-interactive contract for codex; sandbox and approval policy must be set together on every spawn path.
+- **Evidence:** e56e81d
+
+### 2026-08-19 — Deliver codex developer instructions via a profile file, never argv
+
+- **Symptom:** A codex interactive spawn (spawn-1787143847248) died at CreateProcess before codex started.
+- **Root cause:** The injected instruction block runs ~38k chars and Windows caps a command line at 32,767, so `--config developer_instructions=<content>` could not be launched. The temp-file → `Get-Content -Raw` → PS variable pattern did not help: PowerShell expands the variable into argv, the same failure mode as the 2026-04-28 ENAMETOOLONG bug.
+- **Fix:** The launcher writes `$CODEX_HOME/merc-<session>.config.toml` carrying the instructions as a TOML literal `'''` multiline string (any `'''` in the content is broken to `'' '`), launches with `--profile <name>`, and removes the profile after exit via the new `postExitLines` hook. Separately, the exit hook now defaults a null `$LASTEXITCODE` to `-1` (`$mercExitCode`) so a failed launch posts valid JSON instead of crashing the event endpoint's parser.
+- **Prevention:** For codex, any config value that can grow unbounded belongs in a profile file, not `--config`. For launchers generally, never assume `$LASTEXITCODE` is set — a launch that never ran a native command leaves it null.
+- **Evidence:** 3d075f6
+
+### 2026-08-19 — Shared one launcher tail across the claude and codex backends
+
+- **Why:** `openSessionCodex` was a parallel copy of the claude launcher and had silently missed every feature added to it since the fork: the `opts.launch` hook, the ledger PID phone-home, and the exit hook. It also carried a literal copy of `buildLauncherEnvLines`' first eight lines instead of calling it, so it emitted none of what that function appends after them — `ALLMIND_DISPATCH_ID`, the caller's `opts.env` (where per-dispatch completion tokens and thread ids ride), and the `ALLMIND_AGENT_SESSION` marker. The launch hook was load-bearing: a caller setting `opts.launch` to host the launcher in a terminal multiplexer pane got that honored on claude and discarded on codex, because the codex branch returned ~190 lines before the hook ran.
+- **Impact:** Both branches now build only their own env block and invocation args, then hand off to `finishInteractiveLauncher()` for the rest, so the next feature lands on both backends or neither. README documents `env`, `dispatchId`, and `launch` on `openSession`, and corrects two opts previously labeled claude-only that the codex launcher has always honored as `developer_instructions`.
+- **Evidence:** 412c0fd
 
 ### 2026-08-17 — Compact local-model sessions at 125k
 

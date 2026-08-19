@@ -4,7 +4,7 @@
 # State
 
 ## Current Objective
-Core implementation complete; per-spawn settings override and local-model compaction window landed. Next: real CI, versioning workflow, remaining Codex integration test coverage.
+Core implementation complete. Recent focus: codex interactive parity with the claude launcher, and tuning local-model (qwen) spawns for the rig's throughput. Next: real CI, versioning workflow, remaining Codex integration test coverage.
 
 ## Active Work
 - None — all recent work committed
@@ -32,7 +32,7 @@ Core implementation complete; per-spawn settings override and local-model compac
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-08-18
-Commits covered through: 9f61c4228d00906b25827f728d69c42ff195a01a
+Last memory update: 2026-08-19
+Commits covered through: c85417bc0d09054d4a879e937edf6fe951615138
 
-<!-- chinvex:last-commit:9f61c4228d00906b25827f728d69c42ff195a01a -->
+<!-- chinvex:last-commit:c85417bc0d09054d4a879e937edf6fe951615138 -->
