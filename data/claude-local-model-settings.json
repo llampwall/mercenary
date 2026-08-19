@@ -1,10 +1,25 @@
 {
   "autoCompactWindow": 125000,
+  "precomputeCompactionEnabled": false,
   "env": {
     "CLAUDE_CODE_USE_POWERSHELL_TOOL": "1"
   },
   "permissions": {
     "deny": ["Bash"],
     "defaultMode": "bypassPermissions"
+  },
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"P:/software/mercenary/hooks/precompact-qwen-barebones.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }

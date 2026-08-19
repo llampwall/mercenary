@@ -25,6 +25,10 @@ const SAFE_CLI_CHARS = 20000;
 const DEFAULT_LOCAL_MODEL_URL = 'http://127.0.0.1:8001';
 const DEFAULT_LOCAL_MODEL_NAME = 'qwen3.6-27b-local';
 const DEFAULT_LOCAL_MODEL_TIMEOUT_MS = '900000';
+// Output ceiling for local-model spawns. See sanitizeEnv for why the Anthropic-scale 65536 is
+// wrong on a rig that decodes at ~30 tok/s: 16K is still ~9 minutes of generation at the ceiling,
+// which no legitimate single turn approaches, and it bounds a runaway compaction summary.
+const DEFAULT_LOCAL_MODEL_MAX_OUTPUT_TOKENS = 16384;
 // Pin a known-good codex model. gpt-5.5 is confirmed working on Codex CLI
 // 0.133.0 (Phase 1 contract validation, 2026-06-03) — the prior note that it
 // "requires a newer version" was outdated. Every current AllMind caller passes
@@ -330,6 +334,12 @@ function sanitizeEnv(opts = {}) {
     Object.assign(env, getLocalModelProfile(opts));
     env.ALLMIND_LOCAL_MODEL = '1';
     env.CLAUDE_CODE_USE_POWERSHELL_TOOL = '1';
+    // A LOWER OUTPUT CEILING, because on the rig every output token is ~33ms of wall-clock.
+    // 65536 is an Anthropic-scale ceiling; the rig's /slots showed it arriving verbatim as
+    // n_predict on a COMPACTION call (2026-08-19), where nothing bounded the summary but the
+    // model's own stopping. No qwen turn legitimately needs 64K of output, and a summary that
+    // wants it is a summary that has gone wrong. A caller's explicit maxTokens still wins.
+    if (!opts.maxTokens) env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(DEFAULT_LOCAL_MODEL_MAX_OUTPUT_TOKENS);
     // CLAUDE_CODE_REMOTE=1 neutralizes the AUTH_TOKEN/apiKeyHelper/API_KEY
     // disqualifiers in Claude Code's nw() billing-mode check via the m78()
     // bypass. Without it, any of those env/settings keys flips Claude into
