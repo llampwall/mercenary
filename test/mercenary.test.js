@@ -1036,6 +1036,8 @@ describe('openSession codex launcher instructions delivery', () => {
       assert.ok(script.includes('$mercExitCode = if ($null -eq $LASTEXITCODE) { -1 }'),
         'exit code must be defaulted so a failed launch still posts valid JSON');
       assert.ok(script.includes('"exit_code":\' + $mercExitCode'), 'exit hook uses the defaulted exit code');
+      assert.ok(script.includes('--dangerously-bypass-approvals-and-sandbox'),
+        'a dispatched (role-less, sandbox-less) codex session must not stall on on-request approvals');
     } finally {
       if (origCodexHome != null) process.env.CODEX_HOME = origCodexHome;
       else delete process.env.CODEX_HOME;

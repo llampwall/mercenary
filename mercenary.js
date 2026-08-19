@@ -1135,8 +1135,17 @@ async function openSessionCodex(opts, title, tmpBase) {
   //                        (pauses for human approval before each action) which is exactly right.
   //                        Apply workspace-write sandbox as a sensible safety boundary.
   // role: 'allmind'     → persona injection (handled below) + pragmatic personality.
+  // Approval + sandbox policy — same contract as the one-shot path above:
+  // a sandbox keeps its boundary with non-interactive approvals; no sandbox
+  // means full bypass. Without this, codex's default approval_policy is
+  // on-request and a DISPATCHED session stalls asking a human to approve
+  // every action (2026-08-19, second codex review launch).
   const sandbox = getDefaultCodexSandbox(opts, 'interactive');
-  if (sandbox) codexArgs.push(`--sandbox "${sandbox}"`);
+  if (sandbox) {
+    codexArgs.push(`--sandbox "${sandbox}"`, '--config', 'approval_policy="never"');
+  } else {
+    codexArgs.push('--dangerously-bypass-approvals-and-sandbox');
+  }
   if (shouldDisableCodexMcp(opts, 'interactive')) {
     for (const name of collectCodexMcpServerNames(opts.cwd)) {
       codexArgs.push('--config', `mcp_servers.${name}.enabled=false`);
