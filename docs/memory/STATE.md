@@ -32,7 +32,7 @@ Core implementation complete. Recent focus: codex interactive parity with the cl
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-08-20
-Commits covered through: 5da300bfc3ef523c5e44cacbd220d9d75c0687e4
+Last memory update: 2026-08-21
+Commits covered through: cea983bd36752e7d98a6569bfc817d29b6bc9e97
 
-<!-- chinvex:last-commit:5da300bfc3ef523c5e44cacbd220d9d75c0687e4 -->
+<!-- chinvex:last-commit:cea983bd36752e7d98a6569bfc817d29b6bc9e97 -->
