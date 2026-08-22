@@ -1046,3 +1046,51 @@ describe('openSession codex launcher instructions delivery', () => {
     }
   });
 });
+
+// =============================================================================
+// interactive launcher — an oversized initial message must never ride argv
+// =============================================================================
+
+describe('openSession initial message delivery', () => {
+  it('delivers an oversized initial message as a file pointer, not the command line', async () => {
+    // 2026-08-22: AllMind loop sortie loop-1787380779115-c01af1 composed a 33k
+    // brief; $mercInitialMessage as a positional arg blew the 32,767-char
+    // Windows command-line cap and claude died 4s after launch. This pins the
+    // pointer fallback: the full text lives only in initial-message.txt and the
+    // argv payload stays a short constant-size instruction to read it.
+    const bigMessage = 'TASK-BRIEF-BLOCK '.repeat(2000); // ~34k chars
+    let captured = null;
+    await openSession({
+      cwd: tmpdir(),
+      initialMessage: bigMessage,
+      dispatchId: 'spawn-test-big-initial',
+      purpose: 'test', origin: 'mercenary-test',
+      launch: async (ctx) => { captured = ctx; return { pid: null }; },
+    });
+    assert.ok(captured?.launcherPath, 'stub launch callback should receive launcherPath');
+    const script = readFileSync(captured.launcherPath, 'utf8');
+    assert.ok(!script.includes(bigMessage.slice(0, 100)),
+      'oversized message content must not appear inline in the launcher script');
+    assert.ok(!script.includes('$mercInitialMessage = Get-Content'),
+      'oversized message must not be loaded back into the argv variable');
+    const messageFile = join(dirname(captured.launcherPath), 'initial-message.txt');
+    assert.ok(existsSync(messageFile), `initial-message.txt should exist at ${messageFile}`);
+    assert.ok(readFileSync(messageFile, 'utf8') === bigMessage, 'the file carries the full message verbatim');
+    assert.ok(script.includes(`read "${messageFile}"`),
+      'the argv pointer should instruct the agent to read the message file');
+  });
+
+  it('keeps a normal-sized initial message inline via Get-Content', async () => {
+    let captured = null;
+    await openSession({
+      cwd: tmpdir(),
+      initialMessage: 'begin the work',
+      dispatchId: 'spawn-test-small-initial',
+      purpose: 'test', origin: 'mercenary-test',
+      launch: async (ctx) => { captured = ctx; return { pid: null }; },
+    });
+    const script = readFileSync(captured.launcherPath, 'utf8');
+    assert.ok(script.includes('$mercInitialMessage = Get-Content'),
+      'a small message keeps the file → Get-Content → positional-arg path');
+  });
+});

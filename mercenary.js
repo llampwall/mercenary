@@ -47,6 +47,30 @@ function estimateArgLength(args) {
   return args.reduce((sum, a) => sum + a.length + 3, 0);
 }
 
+/**
+ * Emit the launcher line that materializes $mercInitialMessage for an interactive
+ * session. The message is always written to initial-message.txt (the 2026-07-07
+ * mangling fix); one that fits under SAFE_CLI_CHARS loads back via Get-Content -Raw
+ * and rides as the positional arg. A larger one becomes a short pointer telling the
+ * agent to read the file itself — Windows caps a process command line at 32,767
+ * chars, and interactive mode has no stdin fallback (piping stdin would drop the
+ * session out of interactive), so the pointer is the analog of run()'s
+ * useStdinForPrompt. 2026-08-22: an AllMind loop sortie with a 33k brief died at
+ * launch this way, four days after the identical argv death was fixed for codex
+ * developer_instructions only.
+ */
+function pushInitialMessageLine(lines, tmpBase, initialMessage) {
+  const initialMessageFile = join(tmpBase, 'initial-message.txt');
+  writeFileSync(initialMessageFile, initialMessage, 'utf8');
+  if (initialMessage.length > SAFE_CLI_CHARS) {
+    const pointer = `Your full task brief was too large for the command line and was written to a file instead. Before anything else, read "${initialMessageFile}" and execute its contents exactly as if they were this message.`;
+    lines.push(`$mercInitialMessage = '${pointer.replace(/'/g, "''")}'`);
+    lines.push(`Write-Host "[mercenary] Initial message: ${initialMessage.length} chars — over the ${SAFE_CLI_CHARS}-char argv guard, delivered as a file pointer" -ForegroundColor DarkGray`);
+  } else {
+    lines.push(`$mercInitialMessage = Get-Content "${initialMessageFile}" -Raw`);
+  }
+}
+
 function resolveExecutableCandidate(candidatePath) {
   if (!candidatePath) return null;
   if (process.platform === 'win32' && !/\.[A-Za-z0-9]+$/.test(candidatePath)) {
@@ -1204,12 +1228,10 @@ async function openSessionCodex(opts, title, tmpBase) {
     postExitLines.push(`Remove-Item "${profilePath}" -Force -ErrorAction SilentlyContinue`);
   }
 
-  // Initial message via temp file → PS variable — see the claude launcher's
-  // identical block for why inline double-quoting mangles the text.
+  // Initial message via temp file → PS variable (mangling fix), with the argv-length
+  // guard — pushInitialMessageLine holds both, shared with the claude launcher.
   if (opts.initialMessage) {
-    const initialMessageFile = join(tmpBase, 'initial-message.txt');
-    writeFileSync(initialMessageFile, opts.initialMessage, 'utf8');
-    lines.push(`$mercInitialMessage = Get-Content "${initialMessageFile}" -Raw`);
+    pushInitialMessageLine(lines, tmpBase, opts.initialMessage);
     codexArgs.push('$mercInitialMessage');
   }
 
@@ -1340,16 +1362,12 @@ async function openSession(opts = {}) {
   }
   if (opts.mcpConfig) claudeArgs.push(`--mcp-config "${opts.mcpConfig.replace(/"/g, '`"')}"`);
 
-  // Initial message as positional arg — passed via temp file → PS variable
-  // (same pattern as the codex launcher's developer_instructions) so the message
-  // text never enters the launcher script's PowerShell string parsing. The old
-  // inline double-quoted form escaped only `"`, leaving backticks live as
-  // PowerShell's escape character and `$` interpolating — markdown-rich messages
-  // (inline code like `npx tsc --noEmit`) arrived mangled.
+  // Initial message as positional arg — via temp file → PS variable so the text
+  // never enters the launcher script's PowerShell string parsing (the old inline
+  // double-quoted form mangled backticks and `$`), with the argv-length guard —
+  // pushInitialMessageLine holds both, shared with the codex launcher.
   if (opts.initialMessage) {
-    const initialMessageFile = join(tmpBase, 'initial-message.txt');
-    writeFileSync(initialMessageFile, opts.initialMessage, 'utf8');
-    lines.push(`$mercInitialMessage = Get-Content "${initialMessageFile}" -Raw`);
+    pushInitialMessageLine(lines, tmpBase, opts.initialMessage);
     claudeArgs.push('$mercInitialMessage');
   }
 
