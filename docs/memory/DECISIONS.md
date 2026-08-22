@@ -4,6 +4,8 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Extended the model/endpoint routing-var strip from `sanitizeEnv` to `sanitizeEnvCodex` and the interactive launcher, so no spawn path inherits a leaked `ANTHROPIC_BASE_URL` from the parent env
+- Put an argv-length guard on interactive initial messages: over `SAFE_CLI_CHARS` the launcher passes a pointer to `initial-message.txt` instead of the text, after a 33k AllMind loop brief killed a sortie at CreateProcess
 - Bounded qwen compaction: a PreCompact hook supplying barebones custom instructions, `precomputeCompactionEnabled: false`, and a 16K output ceiling replacing the Anthropic-scale 65536 — one measured auto-compaction was costing 6+ minutes of build wall-clock
 - Gave interactive codex sessions the same approval-policy contract as one-shot; without it codex's default `on-request` stalled dispatched sessions waiting on a human
 - Moved codex `developer_instructions` off argv onto a per-session codex profile file — the ~38k-char block was failing at CreateProcess against the Windows 32,767 command-line cap
@@ -21,6 +23,22 @@
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
 
 ## 2026-08
+
+### 2026-08-22 — Routing-var strip now covers every env builder
+
+- **Symptom:** A codex spawn or an interactive session started from a parent process holding `ANTHROPIC_BASE_URL` (AllMind local-model lanes set it) silently routed to the local endpoint, with no error.
+- **Root cause:** The 2026-08-02 strip landed only in `sanitizeEnv()` — the headless/one-shot claude path. `sanitizeEnvCodex` and `buildLauncherEnvLines` were never updated, so two of three spawn paths still passed the parent's routing vars through.
+- **Fix:** Mirror the strip list in both. `sanitizeEnvCodex` deletes the named vars plus the `ANTHROPIC_DEFAULT_*` prefix; the launcher emits `$env:<VAR> = $null` lines for the named vars (it then re-sets `CLAUDE_CODE_REMOTE=1` deliberately, as it always has).
+- **Prevention:** Env-shape invariants belong at every env-builder boundary. Any new builder must repeat the strip; the three builders are the enumerated boundary (same rule the `ALLMIND_AGENT_SESSION` stamp follows).
+- **Evidence:** bdc7a42
+
+### 2026-08-22 — Oversized interactive initial messages ride a file pointer
+
+- **Symptom:** An interactive AllMind loop sortie (`loop-1787380779115-c01af1`) died at launch carrying a 33k-char brief.
+- **Root cause:** The 2026-07-07 temp-file → `Get-Content -Raw` → PS variable fix solved string mangling, not length — PowerShell still expands the variable into the CreateProcess command line, capped at 32,767 chars on Windows. The identical death had been fixed four days earlier for codex `developer_instructions` alone.
+- **Fix:** Shared `pushInitialMessageLine()` guards both interactive launchers with the same `SAFE_CLI_CHARS` threshold `run()` uses for its stdin fallback. Under it, behavior is unchanged. Over it, `$mercInitialMessage` becomes a short pointer instructing the agent to read `initial-message.txt` and execute its contents; interactive mode has no stdin fallback because piping stdin drops the session out of interactive.
+- **Prevention:** The temp-file round trip is a mangling fix, not a length fix. Every launcher value that can grow unbounded needs its own length guard, and the guard belongs in shared code so both backends get it at once.
+- **Evidence:** 6db2e4f
 
 ### 2026-08-19 — Made qwen compaction barebones and bounded its output
 

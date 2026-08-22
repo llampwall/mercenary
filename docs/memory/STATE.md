@@ -4,7 +4,7 @@
 # State
 
 ## Current Objective
-Core implementation complete. Recent focus: codex interactive parity with the claude launcher, and tuning local-model (qwen) spawns for the rig's throughput. Next: real CI, versioning workflow, remaining Codex integration test coverage.
+Core implementation complete. Recent focus: hardening the Windows argv/env boundary on every spawn path (routing-var strip, oversized initial messages). Next: real CI, versioning workflow, remaining Codex integration test coverage.
 
 ## Active Work
 - None — all recent work committed
@@ -13,11 +13,11 @@ Core implementation complete. Recent focus: codex interactive parity with the cl
 - CI is placeholder-only — reports green without running tests
 
 ## Next Actions
-- [ ] Extend routing-var strip to `sanitizeEnvCodex` and `buildLauncherEnvLines` (only `sanitizeEnv` is covered)
 - [ ] Replace placeholder CI with real test execution (Windows runner)
 - [ ] Define release/versioning workflow for `mercenary` CLI distribution
 - [ ] Harden `readLedger()` against malformed JSON — a corrupt ledger currently crashes `--ps`/`--audit`/`--purge`
 - [ ] Finish Codex backend surface + integration tests per `docs/plans/2026-02-27-codex-backend.md`
+- [ ] Decide whether the interactive launcher needs an `ANTHROPIC_DEFAULT_*` wildcard null (the JS builders strip the prefix; the PS1 block nulls only the named vars)
 
 ## Quick Reference
 - Run: `node mercenary.js --prompt "test" --timeout 10`
@@ -32,7 +32,7 @@ Core implementation complete. Recent focus: codex interactive parity with the cl
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-08-21
-Commits covered through: 2317509caaa155c3224f115d61f1bd29996d28ea
+Last memory update: 2026-08-22
+Commits covered through: bdc7a424ab5dad5ee2fb872b436141ae4af4df15
 
-<!-- chinvex:last-commit:2317509caaa155c3224f115d61f1bd29996d28ea -->
+<!-- chinvex:last-commit:bdc7a424ab5dad5ee2fb872b436141ae4af4df15 -->
