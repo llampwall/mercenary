@@ -33,6 +33,6 @@ Core implementation complete. Recent focus: codex interactive parity with the cl
 
 ---
 Last memory update: 2026-08-21
-Commits covered through: cea983bd36752e7d98a6569bfc817d29b6bc9e97
+Commits covered through: 2317509caaa155c3224f115d61f1bd29996d28ea
 
-<!-- chinvex:last-commit:cea983bd36752e7d98a6569bfc817d29b6bc9e97 -->
+<!-- chinvex:last-commit:2317509caaa155c3224f115d61f1bd29996d28ea -->
