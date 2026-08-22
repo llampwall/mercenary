@@ -388,6 +388,18 @@ function sanitizeEnvCodex(opts = {}) {
   delete env.CLAUDE_CODE_ENTRYPOINT;
   delete env.ANTHROPIC_API_KEY;
   delete env.CLAUDE_CODE_MAX_OUTPUT_TOKENS;
+  // Model/endpoint routing vars: mirrors the strip in sanitizeEnv (see comment there).
+  // Codex doesn't read these itself, but a leaked value here could still reach a
+  // claude child spawned from within a codex session's tool use.
+  delete env.ANTHROPIC_BASE_URL;
+  delete env.ANTHROPIC_SMALL_FAST_MODEL;
+  delete env.CLAUDE_CODE_SUBAGENT_MODEL;
+  delete env.API_TIMEOUT_MS;
+  delete env.ALLMIND_LOCAL_MODEL;
+  delete env.CLAUDE_CODE_REMOTE;
+  for (const k of Object.keys(env)) {
+    if (k.toUpperCase().startsWith('ANTHROPIC_DEFAULT_')) delete env[k];
+  }
   env.SHELL = 'C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe';
   // CODEX_API_KEY and OPENAI_API_KEY are preserved — codex needs them
   // Caller-supplied env (e.g. ALLMIND_THREAD_ID for the codex MCP child to
@@ -414,6 +426,12 @@ function buildLauncherEnvLines(opts = {}, localModelProfile = null, localModelEn
     '$env:ANTHROPIC_API_KEY = $null',
     '$env:ANTHROPIC_AUTH_TOKEN = $null',
     '$env:ANTHROPIC_MODEL = $null',
+    // Model/endpoint routing vars: mirrors the strip in sanitizeEnv (see comment there).
+    '$env:ANTHROPIC_BASE_URL = $null',
+    '$env:ANTHROPIC_SMALL_FAST_MODEL = $null',
+    '$env:CLAUDE_CODE_SUBAGENT_MODEL = $null',
+    '$env:API_TIMEOUT_MS = $null',
+    '$env:ALLMIND_LOCAL_MODEL = $null',
     '$env:CLAUDE_CODE_USE_POWERSHELL_TOOL = "1"',
     '$env:CLAUDE_CODE_REMOTE = "1"',
     '$env:SHELL = "C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe"',
