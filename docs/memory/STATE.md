@@ -32,7 +32,7 @@ Core implementation complete. Recent focus: hardening the Windows argv/env bound
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-08-22
-Commits covered through: 8307f1e093c3912b24f37fac3f05933fbc8ac981
+Last memory update: 2026-08-23
+Commits covered through: b261ef0d15c3a5012f264da01c1dade0bbd6b2c6
 
-<!-- chinvex:last-commit:8307f1e093c3912b24f37fac3f05933fbc8ac981 -->
+<!-- chinvex:last-commit:b261ef0d15c3a5012f264da01c1dade0bbd6b2c6 -->
