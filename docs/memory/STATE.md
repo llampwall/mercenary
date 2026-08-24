@@ -33,6 +33,6 @@ Core implementation complete. Recent focus: hardening the Windows argv/env bound
 
 ---
 Last memory update: 2026-08-23
-Commits covered through: b261ef0d15c3a5012f264da01c1dade0bbd6b2c6
+Commits covered through: 01798f5a3ab7bf31ed8f389eaba91e7cb0fd2120
 
-<!-- chinvex:last-commit:b261ef0d15c3a5012f264da01c1dade0bbd6b2c6 -->
+<!-- chinvex:last-commit:01798f5a3ab7bf31ed8f389eaba91e7cb0fd2120 -->
