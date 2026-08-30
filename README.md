@@ -6,6 +6,12 @@ Mercenary is not a backend-neutral abstraction layer. It exposes one API surface
 
 Single file (`mercenary.js`), zero dependencies, Node.js 22 ESM.
 
+## Why this exists
+
+Spawning an agent CLI from another process on Windows is where things quietly break. A timeout that kills only the direct child leaves the real work orphaned, because `claude` and `codex` both run under a shell wrapper and spawn their own subprocesses. A session launched from inside Claude Code inherits `CLAUDECODE`, `ANTHROPIC_API_KEY`, and model-routing variables, so the child silently behaves like the parent instead of like a fresh run. And nothing tracks what got spawned, so a crashed orchestrator leaves processes running with no way to find them.
+
+Generic process libraries do not solve this: they know nothing about `.cmd` shims, `taskkill /T`, Windows Terminal, or which env vars leak agent state. The vendor CLIs do not solve it either; each ships its own flags, config model, and sandbox semantics, and neither is built to be driven headlessly by another agent. Mercenary is the layer in between: one call shape, correct process-tree teardown, a sanitized child environment, and a PID ledger (`--ps`, `--audit`, `--purge`) so nothing gets lost.
+
 ---
 
 ## Requirements
