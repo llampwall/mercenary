@@ -1,5 +1,6 @@
 {
   "autoCompactWindow": 125000,
+  "effortLevel": "medium",
   "precomputeCompactionEnabled": false,
   "env": {
     "CLAUDE_CODE_USE_POWERSHELL_TOOL": "1"
