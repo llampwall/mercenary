@@ -4,7 +4,7 @@
 # State
 
 ## Current Objective
-Core implementation complete. Recent focus: hardening the Windows argv/env boundary on every spawn path (routing-var strip, oversized initial messages). Next: real CI, versioning workflow, remaining Codex integration test coverage.
+Core implementation complete. Recent focus: keeping the local-model (qwen) spawn profile correct for the rig, on top of the hardened Windows argv/env boundary. Next: real CI, versioning workflow, remaining Codex integration test coverage.
 
 ## Active Work
 - None — all recent work committed
@@ -32,7 +32,7 @@ Core implementation complete. Recent focus: hardening the Windows argv/env bound
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-08-23
-Commits covered through: 01798f5a3ab7bf31ed8f389eaba91e7cb0fd2120
+Last memory update: 2026-08-31
+Commits covered through: d07959dd969b013d4f57751edba6a9815797216f
 
-<!-- chinvex:last-commit:01798f5a3ab7bf31ed8f389eaba91e7cb0fd2120 -->
+<!-- chinvex:last-commit:d07959dd969b013d4f57751edba6a9815797216f -->

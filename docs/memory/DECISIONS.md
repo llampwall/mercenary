@@ -4,6 +4,7 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Pinned `effortLevel: medium` in the local-model settings profile — spawns were inheriting the machine-wide `high`, which the rig's chat template rejects with a 400 at spawn
 - Extended the model/endpoint routing-var strip from `sanitizeEnv` to `sanitizeEnvCodex` and the interactive launcher, so no spawn path inherits a leaked `ANTHROPIC_BASE_URL` from the parent env
 - Put an argv-length guard on interactive initial messages: over `SAFE_CLI_CHARS` the launcher passes a pointer to `initial-message.txt` instead of the text, after a 33k AllMind loop brief killed a sortie at CreateProcess
 - Bounded qwen compaction: a PreCompact hook supplying barebones custom instructions, `precomputeCompactionEnabled: false`, and a 16K output ceiling replacing the Anthropic-scale 65536 — one measured auto-compaction was costing 6+ minutes of build wall-clock
@@ -23,6 +24,14 @@
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
 
 ## 2026-08
+
+### 2026-08-31 — Fixed local-model spawns dying at start on an inherited `effortLevel: high`
+
+- **Symptom:** Local-model dispatch `dispatch_req_47eb3ff4` failed at spawn on 2026-08-31; the ninfer engine's chat template rejected reasoning effort `high` with a 400.
+- **Root cause:** `data/claude-local-model-settings.json` did not set `effortLevel`, so the child inherited the machine-wide `high` from user settings. That decree covers opus/sonnet, not qwen.
+- **Fix:** Pin `"effortLevel": "medium"` in the local-model settings profile, matching the rig lanes' service default, so every local-model child states it explicitly instead of inheriting.
+- **Prevention:** The local-model profile must pin any child setting whose machine-wide default is tuned for Anthropic models — inheritance is not neutral for the rig.
+- **Evidence:** d07959d
 
 ### 2026-08-22 — Routing-var strip now covers every env builder
 
