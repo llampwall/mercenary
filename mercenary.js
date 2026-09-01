@@ -4,7 +4,7 @@
 // Single file: module exports + CLI entry point
 
 import { spawn, execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, appendFileSync, mkdtempSync, existsSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdtempSync, existsSync, renameSync, unlinkSync } from 'node:fs';
 import { dirname, join, resolve, basename } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -846,7 +846,31 @@ function buildCodexArgs(opts, warn = (msg) => process.stderr.write(`mercenary: $
     developerInstructions += opts.appendSystemPrompt;
   }
   if (developerInstructions) {
-    args.push('--config', `developer_instructions=${developerInstructions}`);
+    // Windows caps a process command line at 32,767 chars and an injected instruction block
+    // runs tens of KB, so `--config developer_instructions=<content>` fails at CreateProcess
+    // before codex ever starts. The interactive launcher hit this on 2026-08-19
+    // (spawn-1787143847248) and solved it with a per-session profile file; this one-shot path
+    // never got that fix and died the same way on 2026-09-01 (dispatch_req_138a4b7f, the first
+    // headless codex lane to carry an assembled context). Same fix, same reason:
+    // `--profile <name>` layers $CODEX_HOME/<name>.config.toml onto the base config and a TOML
+    // literal multi-line string carries any size. Caller-supplied `-c` overrides still win over
+    // the profile, so a named model or model_provider is unaffected.
+    // Small blocks stay on argv, where they already work.
+    if (developerInstructions.length > 8000) {
+      // TOML literal multi-line strings take no escapes but cannot contain the ''' delimiter;
+      // break any occurrence rather than corrupting the file.
+      const tomlSafe = developerInstructions.replace(/'''/g, "'' '");
+      const profileName = `merc-oneshot-${process.pid}-${Date.now().toString(36)}`;
+      const codexHome = process.env.CODEX_HOME || join(homedir(), '.codex');
+      const profilePath = join(codexHome, `${profileName}.config.toml`);
+      writeFileSync(profilePath, `developer_instructions = '''\n${tomlSafe}\n'''\n`, 'utf8');
+      args.push('--profile', profileName);
+      // Stash the path so run() can remove it when the process exits; the interactive
+      // launcher does the same through its post-exit script lines.
+      args._developerInstructionsProfile = profilePath;
+    } else {
+      args.push('--config', `developer_instructions=${developerInstructions}`);
+    }
   }
 
   // Unsupported features — warn and skip
@@ -876,13 +900,25 @@ function run(opts = {}) {
 
     const backend = opts.backend || 'claude';
     let binaryPath, spawnArgs, env, useStdinForPrompt = false;
+    // A large developer-instructions block is delivered as a codex profile FILE rather than on
+    // argv (see buildCodexArgs); this run owns that file's lifetime and removes it on exit.
+    let instructionsProfilePath = null;
+    const takeProfilePath = (built) => {
+      // The property rides on the returned array, so read it BEFORE spreading. A rebuild below
+      // writes a second file; the first is orphaned and removed here rather than left behind.
+      if (instructionsProfilePath && instructionsProfilePath !== built._developerInstructionsProfile) {
+        try { unlinkSync(instructionsProfilePath); } catch { /* best effort */ }
+      }
+      instructionsProfilePath = built._developerInstructionsProfile || null;
+      return built;
+    };
     try {
       if (backend === 'codex') {
         binaryPath = resolveCodexPath();
-        spawnArgs = ['exec', ...buildCodexArgs(opts)];
+        spawnArgs = ['exec', ...takeProfilePath(buildCodexArgs(opts))];
         env = sanitizeEnvCodex(opts);
         if (estimateArgLength(spawnArgs) > SAFE_CLI_CHARS || opts.prompt.includes('\n')) {
-          spawnArgs = ['exec', ...buildCodexArgs({ ...opts, prompt: '-' })];
+          spawnArgs = ['exec', ...takeProfilePath(buildCodexArgs({ ...opts, prompt: '-' }))];
           useStdinForPrompt = true;
         }
       } else {
@@ -978,6 +1014,10 @@ function run(opts = {}) {
 
     proc.on('close', (exitCode) => {
       if (timer) clearTimeout(timer);
+      if (instructionsProfilePath) {
+        try { unlinkSync(instructionsProfilePath); } catch { /* best effort */ }
+        instructionsProfilePath = null;
+      }
       try { ledgerMarkDead(proc.pid); } catch { /* ledger failure */ }
       const durationMs = Date.now() - startTime;
       const resolvedExitCode = killed ? 124 : (exitCode ?? 1);
@@ -1024,6 +1064,11 @@ function run(opts = {}) {
 
     proc.on('error', (err) => {
       if (timer) clearTimeout(timer);
+      // A spawn that never started still wrote its profile file; do not leave it in CODEX_HOME.
+      if (instructionsProfilePath) {
+        try { unlinkSync(instructionsProfilePath); } catch { /* best effort */ }
+        instructionsProfilePath = null;
+      }
       try { ledgerMarkDead(proc.pid); } catch { /* ledger failure */ }
       reject(new Error(`Failed to spawn ${backend} process at ${binaryPath}: ${err.message}. Common causes: binary not found (ENOENT), permission denied (EACCES), or missing system DLL. Check that the CLI binary exists and is executable.`));
     });
