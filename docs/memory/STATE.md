@@ -4,7 +4,7 @@
 # State
 
 ## Current Objective
-Core implementation complete. Recent focus: keeping the local-model (qwen) spawn profile correct for the rig, on top of the hardened Windows argv/env boundary. Next: real CI, versioning workflow, remaining Codex integration test coverage.
+Core implementation complete. Recent focus: closing Windows argv-length holes on the codex spawn paths and keeping the local-model (qwen) profile correct for the rig. Next: real CI, versioning workflow, remaining Codex integration test coverage.
 
 ## Active Work
 - None — all recent work committed
@@ -17,7 +17,7 @@ Core implementation complete. Recent focus: keeping the local-model (qwen) spawn
 - [ ] Define release/versioning workflow for `mercenary` CLI distribution
 - [ ] Harden `readLedger()` against malformed JSON — a corrupt ledger currently crashes `--ps`/`--audit`/`--purge`
 - [ ] Finish Codex backend surface + integration tests per `docs/plans/2026-02-27-codex-backend.md`
-- [ ] Decide whether the interactive launcher needs an `ANTHROPIC_DEFAULT_*` wildcard null (the JS builders strip the prefix; the PS1 block nulls only the named vars)
+- [ ] Audit spawn paths for fixes that landed on only one builder — codex one-shot vs interactive argv, and the `ANTHROPIC_DEFAULT_*` wildcard null the PS1 launcher still lacks
 
 ## Quick Reference
 - Run: `node mercenary.js --prompt "test" --timeout 10`
@@ -32,7 +32,7 @@ Core implementation complete. Recent focus: keeping the local-model (qwen) spawn
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-08-31
-Commits covered through: d07959dd969b013d4f57751edba6a9815797216f
+Last memory update: 2026-09-01
+Commits covered through: 64d7a8c2c9397076e1878bf4a27cc6b67d843605
 
-<!-- chinvex:last-commit:d07959dd969b013d4f57751edba6a9815797216f -->
+<!-- chinvex:last-commit:64d7a8c2c9397076e1878bf4a27cc6b67d843605 -->

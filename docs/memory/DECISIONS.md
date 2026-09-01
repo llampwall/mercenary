@@ -4,6 +4,7 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Extended the codex profile-file delivery of `developer_instructions` to the one-shot path — the 2026-08-19 interactive fix never reached `buildCodexArgs`, so the first headless codex lane carrying an assembled context died at CreateProcess
 - Pinned `effortLevel: medium` in the local-model settings profile — spawns were inheriting the machine-wide `high`, which the rig's chat template rejects with a 400 at spawn
 - Extended the model/endpoint routing-var strip from `sanitizeEnv` to `sanitizeEnvCodex` and the interactive launcher, so no spawn path inherits a leaked `ANTHROPIC_BASE_URL` from the parent env
 - Put an argv-length guard on interactive initial messages: over `SAFE_CLI_CHARS` the launcher passes a pointer to `initial-message.txt` instead of the text, after a 33k AllMind loop brief killed a sortie at CreateProcess
@@ -22,6 +23,16 @@
 - Fixed leaked `CLAUDE_CONFIG_DIR` causing spawned claude sessions to authenticate as the wrong account — now stripped in `sanitizeEnv()`
 - Fixed `initialMessage` mangling in interactive claude/codex launchers: temp-file → `Get-Content -Raw` → PS variable → bare positional arg, replacing manual double-quote escaping that let backticks/`$` corrupt markdown-rich messages
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
+
+## 2026-09
+
+### 2026-09-01 — Fixed codex one-shot dying at CreateProcess on large developer instructions
+
+- **Symptom:** Headless codex dispatch `dispatch_req_138a4b7f` failed with ENAMETOOLONG at spawn — codex never started. It was the first headless codex lane to carry an assembled context.
+- **Root cause:** `buildCodexArgs` put the whole persona + `appendSystemPrompt` block on argv as `--config developer_instructions=<content>`. That block runs tens of KB; Windows caps a command line at 32,767 chars. The interactive launcher hit the same wall on 2026-08-19 and was fixed with a per-session codex profile file; the one-shot path never got that fix.
+- **Fix:** Blocks over 8000 chars are written to `$CODEX_HOME/merc-oneshot-<pid>-<ts>.config.toml` as a TOML literal multiline string and named with `--profile`; smaller blocks stay on argv. Caller-supplied `-c` overrides still win over the profile, so a named model or `model_provider` is unaffected. `run()` owns the file's lifetime and removes it on close, on spawn error, and when the stdin-prompt rebuild orphans an earlier one.
+- **Prevention:** Codex one-shot and interactive build argv independently — a spawn-boundary fix on one path must be checked against the other. See the new hazard bullet in CONSTRAINTS.md.
+- **Evidence:** 64d7a8c (suite: 107 tests, 98 pass, 0 fail, 9 skipped — unchanged from baseline)
 
 ## 2026-08
 
