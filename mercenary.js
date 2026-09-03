@@ -948,20 +948,23 @@ function run(opts = {}) {
       concurrentAtStart = Object.values(snap.entries).filter(e => e.status === 'alive').length;
     } catch { /* ledger read failure is non-fatal */ }
 
-    // node#21825: windowsHide is silently dropped when detached:true on win32,
-    // so a detached codex gets a fresh VISIBLE console and every child it spawns
-    // (the pwsh AST/shell helper, git.exe, conhost) inherits that visible console
-    // -> the terminal-popup cascade. Visual A/B de-risk (2026-06-05) confirmed
-    // codex's children INHERIT the parent's console: drop detached for codex so
-    // windowsHide:true is honored (CREATE_NO_WINDOW), codex gets a HIDDEN console,
-    // and its whole child tree rides it silently. treeKill uses taskkill /T /F by
-    // PID (not the process group), so it still tears the tree down. Claude keeps
-    // detached:true — its -p flashing is a separate problem (ConPTY shim).
+    // Never detached, for EITHER backend. On win32 libuv turns detached:true into
+    // DETACHED_PROCESS, and DETACHED wins over the CREATE_NO_WINDOW that windowsHide
+    // asks for (node#21825): the child ends up with NO console at all, and every
+    // console-subsystem thing it then spawns without its own hide flag gets a fresh
+    // VISIBLE console. For codex that was the pwsh/git helper cascade (A/B de-risk,
+    // 2026-06-05). For claude it is Claude Code's own startup `cmd /c REG QUERY ...
+    // MachineGuid`, which pops a cmd.exe window per headless session — confirmed by
+    // eye 2026-09-02 (flash-watcher probes/no-admin/repro, 3/3 detached runs popped,
+    // 3/3 windowsHide-only runs did not). With detached off, CREATE_NO_WINDOW is
+    // honored, the child owns a HIDDEN console, and its whole tree inherits it.
+    // Nothing here needed detached: treeKill uses taskkill /T /F by PID (not the
+    // process group), and a Windows child outlives its parent without it.
     const proc = spawn(binaryPath, spawnArgs, {
       cwd: opts.cwd || process.cwd(),
       shell: false,
       windowsHide: true,
-      detached: backend !== 'codex',
+      detached: false,
       stdio: [useStdinForPrompt ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       env
     });

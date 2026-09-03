@@ -302,13 +302,13 @@ The `streaming: true` option is a legacy alias for `role: 'pipeline'`.
 ## Process Management
 
 - Spawned with `shell: false`, resolved binary path (no PATH lookup at spawn time)
-- `windowsHide: true`, `detached: true`, `stdio: ['ignore', 'pipe', 'pipe']`
+- `windowsHide: true`, `detached: false`, `stdio: ['ignore', 'pipe', 'pipe']` — never `detached` on win32: libuv's DETACHED_PROCESS overrides CREATE_NO_WINDOW (node#21825), leaving the child with no console so its own spawns pop visible windows
 - `proc.unref()` — parent exit does not wait for child
 - Timeout kill: `taskkill /T /F /PID` kills the entire process tree, not just the root process
 - Double-kill: a second `taskkill` fires after 5s grace period to handle stubborn processes
 - Exit code `124` on timeout (matches `timeout(1)` convention)
 
-**Note on Windows console window flashing:** `windowsHide: true` only applies to the top-level Mercenary child. Descendant processes spawned by the backend may still create visible windows on Windows.
+**Note on Windows console window flashing:** with `detached: false`, `windowsHide: true` gives the top-level child a hidden console that every descendant inherits, so the backend's own spawns stay invisible. A descendant can still pop a window only if it is itself spawned with `detached`/`DETACHED_PROCESS` (no console) and then spawns a console program without a hide flag.
 
 - Claude: child tool or MCP processes can still flash visible console windows. The `pipeline` role mitigates the MCP-server portion by suppressing MCP loading via `--strict-mcp-config`.
 - Codex: even with `disableMcp: true`, Codex may still spawn visible `pwsh`, `git`, or `conhost` children during tool execution on Windows. That is backend behavior, not something Mercenary fully suppresses.

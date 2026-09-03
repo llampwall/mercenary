@@ -4,6 +4,7 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Dropped `detached: true` for the claude backend too — a detached headless claude has no console (DETACHED_PROCESS beats CREATE_NO_WINDOW), so Claude Code's startup `cmd /c REG QUERY MachineGuid` popped a cmd.exe window per session; confirmed by eye, hidden-console runs were silent
 - Extended the codex profile-file delivery of `developer_instructions` to the one-shot path — the 2026-08-19 interactive fix never reached `buildCodexArgs`, so the first headless codex lane carrying an assembled context died at CreateProcess
 - Pinned `effortLevel: medium` in the local-model settings profile — spawns were inheriting the machine-wide `high`, which the rig's chat template rejects with a 400 at spawn
 - Extended the model/endpoint routing-var strip from `sanitizeEnv` to `sanitizeEnvCodex` and the interactive launcher, so no spawn path inherits a leaked `ANTHROPIC_BASE_URL` from the parent env
@@ -25,6 +26,14 @@
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
 
 ## 2026-09
+
+### 2026-09-02 — Dropped `detached: true` for headless claude spawns (window popup per session)
+
+- **Symptom:** Every headless claude one-shot on Windows flashed a cmd.exe window (a Windows Terminal tab that takes focus) shortly after start. During long agent work (test suites, loop dispatches) the operator saw a steady stream of them.
+- **Root cause:** `run()` spawned claude with `detached: true` + `windowsHide: true`. libuv sets `DETACHED_PROCESS | CREATE_NO_WINDOW`, and DETACHED wins (node#21825): claude has no console at all. Claude Code then runs `cmd.exe /d /s /c REG.exe QUERY HKLM\SOFTWARE\Microsoft\Cryptography /v MachineGuid` at startup without a hide flag, and a console program spawned by a console-less parent gets a fresh visible console. Measured with a WMI process-creation log (conhost for that cmd at 18:12:58.437, `OpenConsole.exe -Embedding` handoff at .475) and confirmed by eye with `P:\software\flash-watcher\probes\no-admin\repro` (3/3 detached runs popped, 3/3 windowsHide-only runs did not). The 2026-06-05 codex fix had already established the mechanism; the "claude's -p flashing is a separate ConPTY problem" note was wrong.
+- **Fix:** `detached: false` unconditionally at the `run()` spawn. The child now owns a hidden CREATE_NO_WINDOW console that its entire tree inherits. `treeKill` is by PID (`taskkill /T /F`) and a Windows child outlives its parent without `detached`, so nothing relied on it.
+- **Prevention:** Never pass `detached: true` to a win32 spawn that also wants `windowsHide`; the two cannot both hold. If a child tree pops windows, check first whether some ancestor has no console.
+- **Evidence:** this commit; probes and repros in flash-watcher `ac946cb`, `f905b75`
 
 ### 2026-09-01 — Fixed codex one-shot dying at CreateProcess on large developer instructions
 
