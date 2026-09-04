@@ -4,7 +4,7 @@
 # State
 
 ## Current Objective
-Core implementation complete. Recent focus: closing Windows argv-length holes on the codex spawn paths and keeping the local-model (qwen) profile correct for the rig. Next: real CI, versioning workflow, remaining Codex integration test coverage.
+Core implementation complete. Recent focus: Windows spawn hygiene — argv-length holes on the codex paths, hidden consoles on both backends, and keeping the local-model (qwen) profile correct for the rig. Next: real CI, versioning workflow, remaining Codex integration test coverage.
 
 ## Active Work
 - None — all recent work committed
@@ -17,11 +17,11 @@ Core implementation complete. Recent focus: closing Windows argv-length holes on
 - [ ] Define release/versioning workflow for `mercenary` CLI distribution
 - [ ] Harden `readLedger()` against malformed JSON — a corrupt ledger currently crashes `--ps`/`--audit`/`--purge`
 - [ ] Finish Codex backend surface + integration tests per `docs/plans/2026-02-27-codex-backend.md`
-- [ ] Audit spawn paths for fixes that landed on only one builder — codex one-shot vs interactive argv, and the `ANTHROPIC_DEFAULT_*` wildcard null the PS1 launcher still lacks
+- [ ] Close the last one-builder gap: the PS1 interactive launcher still nulls named routing vars only, not the `ANTHROPIC_DEFAULT_*` wildcard the JS builders strip
 
 ## Quick Reference
 - Run: `node mercenary.js --prompt "test" --timeout 10`
-- Test: `node test/mercenary.test.js`
+- Test: `node test/mercenary.test.js` (107 tests: 98 pass, 0 fail, 9 skipped)
 - Codex run: `node mercenary.js --prompt "test" --backend codex --timeout 10`
 - Interactive: `node mercenary.js --interactive`
 - Local model: `node mercenary.js --use-local-model --prompt "test"` (or `--backend qwen`)
@@ -32,7 +32,7 @@ Core implementation complete. Recent focus: closing Windows argv-length holes on
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-09-01
-Commits covered through: 64d7a8c2c9397076e1878bf4a27cc6b67d843605
+Last memory update: 2026-09-03
+Commits covered through: 8358065a9fabdd6831b6802307b3059590a073aa
 
-<!-- chinvex:last-commit:64d7a8c2c9397076e1878bf4a27cc6b67d843605 -->
+<!-- chinvex:last-commit:8358065a9fabdd6831b6802307b3059590a073aa -->
