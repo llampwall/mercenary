@@ -1099,18 +1099,30 @@ describe('openSession initial message delivery', () => {
 // interactive local-model launch profile — tool allowlist + no MCP
 // =============================================================================
 
-const LOCAL_RIG_HEALTH_URLS = [
-  'http://skynet:8003/health',   // Qwen 3.8 under NInfer (5090)
-  'http://skynet:8005/health',   // 3090 work lane
-  'http://allmind-local:8002/health', // office rig
+// llama.cpp lanes first: their chat template lets Claude Code's mid-conversation
+// system messages through, and their grammar converter is what this profile
+// exists to satisfy. NInfer is last and is the only lane allowed to skip.
+const LOCAL_RIG_LANES = [
+  { rig: 'skynet-qwen38-work', health: 'http://skynet:8005/health' },
+  { rig: 'allmind-local-qwen38', health: 'http://allmind-local:8002/health' },
+  { rig: 'skynet-ninfer-qwen38-nvfp4', health: 'http://skynet:8003/health', skipOnApiError: true },
 ];
+const RIGS_CONFIG_PATH = 'P:\\software\\allmind\\config\\rigs.json';
+
+// The rig's served model alias. Launching against the launcher's default name
+// gets [claude-code:unrecognized_model] from a rig that serves something else.
+function rigModelName(rig) {
+  try {
+    return JSON.parse(readFileSync(RIGS_CONFIG_PATH, 'utf8')).rigs?.[rig]?.model || null;
+  } catch { return null; }
+}
 
 async function firstLiveRig() {
-  for (const url of LOCAL_RIG_HEALTH_URLS) {
+  for (const lane of LOCAL_RIG_LANES) {
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-      if (res.ok) return url.replace(/\/health$/, '');
-    } catch { /* next */ }
+      const res = await fetch(lane.health, { signal: AbortSignal.timeout(4000) });
+      if (res.ok) return { ...lane, baseUrl: lane.health.replace(/\/health$/, '') };
+    } catch { /* next lane */ }
   }
   return null;
 }
@@ -1156,15 +1168,18 @@ describe('openSession local-model launch profile', () => {
 
   it('runs one real turn on a live rig without the grammar error', async (t) => {
     // t.skip() marks the test but does not stop it — every skip path must return.
-    const baseUrl = await firstLiveRig();
-    if (!baseUrl) { t.skip(`no local rig answered: ${LOCAL_RIG_HEALTH_URLS.join(', ')}`); return; }
+    const lane = await firstLiveRig();
+    if (!lane) { t.skip(`no local rig answered: ${LOCAL_RIG_LANES.map((l) => l.health).join(', ')}`); return; }
     try { resolveClaudePath(); } catch { t.skip('claude not available'); return; }
+    const modelName = rigModelName(lane.rig);
+    if (!modelName) { t.skip(`no served model name for ${lane.rig} in ${RIGS_CONFIG_PATH}`); return; }
 
     const workDir = mkdtempSync(join(tmpdir(), 'merc-local-live-'));
     const marker = join(workDir, 'LIVE_OK.txt');
     const { ctx } = await captureLauncher({
       useLocalModel: true,
-      localModelUrl: baseUrl,
+      localModelUrl: lane.baseUrl,
+      localModelName: modelName,
       cwd: workDir,
       dispatchId: 'spawn-test-local-live',
       initialMessage: `Run this exact PowerShell command and nothing else: Set-Content -Path "${marker}" -Value LIVE_OK`,
@@ -1183,11 +1198,14 @@ describe('openSession local-model launch profile', () => {
       }
       // The grammar error is what this profile exists to prevent — that assertion is the gate.
       assert.ok(!/failed to parse grammar/i.test(output), `grammar error on the live rig: ${output.slice(-500)}`);
-      // A rig that rejects the request for an unrelated reason (2026-09-05: skynet:8003
-      // answers 400 on thinking.display='omitted', which NInfer does not implement) is a
-      // serving-layer gap, not a launch-profile defect. Skip rather than redden the gate.
+      // Only an engine that refuses the request shape outright skips (2026-09-05:
+      // skynet:8003 answers 400 on thinking.display='omitted', which NInfer does not
+      // implement). On a llama.cpp lane — where the proof was made — any failure is
+      // this profile's problem and reddens the gate.
       const apiError = output.match(/API Error: .*/)?.[0];
-      if (!existsSync(marker) && apiError) { t.skip(`rig rejected the turn for an unrelated reason: ${apiError}`); return; }
+      if (!existsSync(marker) && apiError && lane.skipOnApiError) {
+        t.skip(`${lane.rig} refused the request shape: ${apiError}`); return;
+      }
       assert.ok(existsSync(marker), `the turn never completed; output tail: ${output.slice(-500)}`);
     } finally {
       if (child.pid) treeKill(child.pid);
