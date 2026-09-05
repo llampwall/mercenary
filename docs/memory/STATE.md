@@ -4,7 +4,7 @@
 # State
 
 ## Current Objective
-Core implementation complete. Recent focus: Windows spawn hygiene — argv-length holes on the codex paths, hidden consoles on both backends, and keeping the local-model (qwen) profile correct for the rig. Next: real CI, versioning workflow, remaining Codex integration test coverage.
+Core implementation complete. Recent focus: the interactive local-model (qwen) launch profile — a six-tool allowlist plus strict MCP with no config so llama.cpp's grammar converter and the 131K rig window both hold, proven by a rig-gated live check. Next: real CI, versioning workflow, remaining Codex integration test coverage.
 
 ## Active Work
 - None — all recent work committed
@@ -21,7 +21,7 @@ Core implementation complete. Recent focus: Windows spawn hygiene — argv-lengt
 
 ## Quick Reference
 - Run: `node mercenary.js --prompt "test" --timeout 10`
-- Test: `node test/mercenary.test.js` (107 tests: 98 pass, 0 fail, 9 skipped)
+- Test: `node test/mercenary.test.js` (111 tests: 102 pass, 0 fail, 9 skipped — run 2026-09-05)
 - Codex run: `node mercenary.js --prompt "test" --backend codex --timeout 10`
 - Interactive: `node mercenary.js --interactive`
 - Local model: `node mercenary.js --use-local-model --prompt "test"` (or `--backend qwen`)
@@ -32,7 +32,7 @@ Core implementation complete. Recent focus: Windows spawn hygiene — argv-lengt
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-09-03
-Commits covered through: 8358065a9fabdd6831b6802307b3059590a073aa
+Last memory update: 2026-09-05
+Commits covered through: 6c1552510aa6cfeed79f7d75167fb5065e0c5b75
 
-<!-- chinvex:last-commit:8358065a9fabdd6831b6802307b3059590a073aa -->
+<!-- chinvex:last-commit:6c1552510aa6cfeed79f7d75167fb5065e0c5b75 -->

@@ -4,6 +4,8 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Gave interactive local-model sessions their own launch profile: a six-tool allowlist and strict MCP with no config, because the Artifact tool's schema breaks llama.cpp's grammar converter and the MCP tool schemas nearly fill the rig's 131K window
+- Made the rig-gated live check conclusive: it runs on a llama.cpp lane with the rig's own served model name, fails the gate on any error there, and skips only when NInfer refuses the request shape
 - Dropped `detached: true` for the claude backend too — a detached headless claude has no console (DETACHED_PROCESS beats CREATE_NO_WINDOW), so Claude Code's startup `cmd /c REG QUERY MachineGuid` popped a cmd.exe window per session; confirmed by eye, hidden-console runs were silent
 - Extended the codex profile-file delivery of `developer_instructions` to the one-shot path — the 2026-08-19 interactive fix never reached `buildCodexArgs`, so the first headless codex lane carrying an assembled context died at CreateProcess
 - Pinned `effortLevel: medium` in the local-model settings profile — spawns were inheriting the machine-wide `high`, which the rig's chat template rejects with a 400 at spawn
@@ -26,6 +28,20 @@
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
 
 ## 2026-09
+
+### 2026-09-05 — Made the local-model live check conclusive and lane-aware
+
+- **Why:** The rig-gated check waited out its full 300s deadline and treated any API error as skippable, so it could neither fail fast nor prove anything. It also launched with the launcher's default local model name, which the rigs answer with `[claude-code:unrecognized_model]`.
+- **Impact:** The check now stops when the launcher child exits; lane order prefers llama.cpp (skynet:8005, allmind-local:8002) over NInfer (skynet:8003); the session launches with the served alias read from `P:\software\allmind\config\rigs.json`. A grammar error always reddens the gate. Skipping on API error is NInfer-only — on 2026-09-05 that lane answered `400 thinking.display=omitted requires encrypted hidden-reasoning restore semantics that NInfer does not provide`.
+- **Evidence:** 77f8c05, 0035bd2; spec paragraph in 6c15525
+
+### 2026-09-05 — Tool allowlist and strict MCP for interactive local-model sessions
+
+- **Symptom:** Every turn in an interactive local-model session failed with `400 Failed to initialize samplers: failed to parse grammar`.
+- **Root cause:** The built-in Artifact tool is interactive-only and its JSON schema defeats llama.cpp's grammar converter (bisected 2026-09-04 against allmind-local:8002, Qwen 3.8 27B). Separately, the user-level MCP servers and the Chrome bridge load enough tool schema to nearly fill the rig's 131K window.
+- **Fix:** `openSession()` emits `--tools Read,Edit,Write,Glob,Grep,PowerShell` (`LOCAL_MODEL_INTERACTIVE_TOOLS`) and defaults `strictMcp` to true with no `--mcp-config` when `useLocalModel` is set. `opts.tools` / `opts.strictMcp` still override; non-local interactive sessions emit neither flag and are byte-identical to before; the headless one-shot path (`buildArgs`) is untouched.
+- **Prevention:** The interactive strict-MCP prohibition now carries this one named exception in CLAUDE.md and CONSTRAINTS. Any widening of the interactive local toolset must re-check the grammar path against a llama.cpp rig.
+- **Evidence:** ed86c27
 
 ### 2026-09-02 — Dropped `detached: true` for headless claude spawns (window popup per session)
 
