@@ -91,6 +91,18 @@ proc.unref();
    ```
 3. Return `{ pid, title, launcherPath }` immediately. Session is now autonomous.
 
+#### Local-model interactive profile (`useLocalModel: true`)
+
+An interactive session pointed at a local rig additionally emits `--tools Read,Edit,Write,Glob,Grep,PowerShell`
+(`LOCAL_MODEL_INTERACTIVE_TOOLS`) and `--strict-mcp-config` with no `--mcp-config`. The built-in `Artifact`
+tool is interactive-only and its JSON schema defeats llama.cpp's grammar converter — every turn fails
+`400 Failed to initialize samplers: failed to parse grammar` (bisected 2026-09-04) — and the operator's
+user-level MCP servers plus the Chrome bridge load enough tool schema to nearly fill the rig's 131K window
+on their own. `opts.tools` and `opts.strictMcp` still override; non-local interactive sessions emit neither
+flag. The `Bash` deny in `data/claude-local-model-settings.json` stays: the profile sets
+`CLAUDE_CODE_USE_POWERSHELL_TOOL=1` and the PowerShell tool is a separate tool, so the deny blocks nothing
+the allowlist grants. Headless one-shot local runs (`buildArgs`) are unaffected.
+
 #### Environment Sanitization (`sanitizeEnv()`)
 
 Always applied to child process env:
