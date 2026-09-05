@@ -26,7 +26,7 @@ JavaScript (Node.js 22, ESM)
 - Windows-first implementation is intentional (`taskkill`, `wt`, `pwsh`).
 - Claude one-shot launches MUST include `--dangerously-skip-permissions`; one-shot adds `--no-session-persistence` unless `--resume` is used.
 - Pipeline role MUST enforce strict MCP isolation via `--strict-mcp-config` and MUST NOT inject a hardcoded `mcp-none.json` fallback.
-- Interactive sessions default `strictMcp` to `false`; strict MCP in interactive mode is explicit opt-in.
+- Interactive sessions default `strictMcp` to `false`; strict MCP in interactive mode is explicit opt-in. The one exception is the local-model interactive profile (`useLocalModel`), which defaults to `--strict-mcp-config` with no `--mcp-config` and carries the `--tools Read,Edit,Write,Glob,Grep,PowerShell` allowlist.
 - `codex` one-shot defaults to `--dangerously-bypass-approvals-and-sandbox --ephemeral` unless `sandbox` is explicitly provided.
 - Child env sanitization MUST remove `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_API_KEY`, and all model/endpoint routing vars (`ANTHROPIC_BASE_URL`, `ANTHROPIC_SMALL_FAST_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL`, `API_TIMEOUT_MS`, `ALLMIND_LOCAL_MODEL`, `CLAUDE_CODE_REMOTE`, `ANTHROPIC_DEFAULT_*`) — only the local-model profile may re-set routing, deliberately.
 - Child `SHELL` MUST be forced to pwsh path for Windows automation consistency.
