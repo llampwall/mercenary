@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 // Import module exports
-import { run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnv, sanitizeEnvCodex, buildArgs, buildCodexArgs, parseArgs, ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, checkPidAlive, discoverProcesses, readLedger, writeLedger, buildLauncherEnvLines, AGENT_SESSION_VAR } from '../mercenary.js';
+import { run, openSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnv, sanitizeEnvCodex, buildArgs, buildCodexArgs, parseArgs, ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, checkPidAlive, discoverProcesses, readLedger, writeLedger, buildLauncherEnvLines, AGENT_SESSION_VAR, LOCAL_MODEL_INTERACTIVE_TOOLS } from '../mercenary.js';
 
 const MERCENARY = join(import.meta.dirname, '..', 'mercenary.js');
 
@@ -1092,5 +1092,97 @@ describe('openSession initial message delivery', () => {
     const script = readFileSync(captured.launcherPath, 'utf8');
     assert.ok(script.includes('$mercInitialMessage = Get-Content'),
       'a small message keeps the file → Get-Content → positional-arg path');
+  });
+});
+
+// =============================================================================
+// interactive local-model launch profile — tool allowlist + no MCP
+// =============================================================================
+
+const LOCAL_RIG_HEALTH_URLS = [
+  'http://skynet:8003/health',   // Qwen 3.8 under NInfer (5090)
+  'http://skynet:8005/health',   // 3090 work lane
+  'http://allmind-local:8002/health', // office rig
+];
+
+async function firstLiveRig() {
+  for (const url of LOCAL_RIG_HEALTH_URLS) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      if (res.ok) return url.replace(/\/health$/, '');
+    } catch { /* next */ }
+  }
+  return null;
+}
+
+async function captureLauncher(opts) {
+  let captured = null;
+  await openSession({
+    cwd: tmpdir(),
+    purpose: 'test', origin: 'mercenary-test',
+    launch: async (ctx) => { captured = ctx; return { pid: null }; },
+    ...opts,
+  });
+  return { ctx: captured, script: readFileSync(captured.launcherPath, 'utf8') };
+}
+
+describe('openSession local-model launch profile', () => {
+  it('emits the built-in tool allowlist and strict MCP for a local session', async () => {
+    // 2026-09-04: the Artifact tool's JSON schema defeats llama.cpp's grammar
+    // converter (400 on every turn), and the user MCP servers' schemas alone
+    // nearly fill the rig's 131K window.
+    const { script } = await captureLauncher({ useLocalModel: true, dispatchId: 'spawn-test-local-tools' });
+    assert.ok(script.includes(`--tools "${LOCAL_MODEL_INTERACTIVE_TOOLS}"`), 'local session carries the allowlist');
+    assert.equal(LOCAL_MODEL_INTERACTIVE_TOOLS, 'Read,Edit,Write,Glob,Grep,PowerShell');
+    assert.ok(script.includes('--strict-mcp-config'), 'local session suppresses MCP servers');
+    assert.ok(!script.includes('--mcp-config'), 'no MCP config file is passed, so nothing loads');
+    assert.ok(script.includes('claude-local-model-settings.json'), 'the local settings file is still attached');
+  });
+
+  it('emits neither for a non-local interactive session', async () => {
+    const { script } = await captureLauncher({ dispatchId: 'spawn-test-nonlocal-tools' });
+    assert.ok(!script.includes('--tools'), 'non-local sessions are unchanged');
+    assert.ok(!script.includes('--strict-mcp-config'), 'interactive sessions still default strictMcp to false');
+  });
+
+  it('lets the caller override the toolset and strict MCP', async () => {
+    const { script } = await captureLauncher({
+      useLocalModel: true, tools: 'Read,Grep', strictMcp: false,
+      dispatchId: 'spawn-test-local-override',
+    });
+    assert.ok(script.includes('--tools "Read,Grep"'), 'opts.tools overrides the default list');
+    assert.ok(!script.includes('--strict-mcp-config'), 'opts.strictMcp overrides the local default');
+  });
+
+  it('runs one real turn on a live rig without the grammar error', async (t) => {
+    // t.skip() marks the test but does not stop it — every skip path must return.
+    const baseUrl = await firstLiveRig();
+    if (!baseUrl) { t.skip(`no local rig answered: ${LOCAL_RIG_HEALTH_URLS.join(', ')}`); return; }
+    try { resolveClaudePath(); } catch { t.skip('claude not available'); return; }
+
+    const workDir = mkdtempSync(join(tmpdir(), 'merc-local-live-'));
+    const marker = join(workDir, 'LIVE_OK.txt');
+    const { ctx } = await captureLauncher({
+      useLocalModel: true,
+      localModelUrl: baseUrl,
+      cwd: workDir,
+      dispatchId: 'spawn-test-local-live',
+      initialMessage: `Run this exact PowerShell command and nothing else: Set-Content -Path "${marker}" -Value LIVE_OK`,
+    });
+
+    const child = spawn(ctx.pwsh, ['-NoProfile', '-File', ctx.launcherPath], { cwd: workDir, windowsHide: true });
+    let output = '';
+    child.stdout.on('data', (d) => { output += d; });
+    child.stderr.on('data', (d) => { output += d; });
+    try {
+      const deadline = Date.now() + 300000;
+      while (Date.now() < deadline && !existsSync(marker) && !/failed to parse grammar/i.test(output)) {
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      assert.ok(!/failed to parse grammar/i.test(output), `grammar error on the live rig: ${output.slice(-500)}`);
+      assert.ok(existsSync(marker), `the turn never completed; output tail: ${output.slice(-500)}`);
+    } finally {
+      if (child.pid) treeKill(child.pid);
+    }
   });
 });

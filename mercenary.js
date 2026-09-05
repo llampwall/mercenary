@@ -29,6 +29,11 @@ const DEFAULT_LOCAL_MODEL_TIMEOUT_MS = '900000';
 // wrong on a rig that decodes at ~30 tok/s: 16K is still ~9 minutes of generation at the ceiling,
 // which no legitimate single turn approaches, and it bounds a runaway compaction summary.
 const DEFAULT_LOCAL_MODEL_MAX_OUTPUT_TOKENS = 16384;
+// Built-in toolset an interactive local-model session is offered (CLI --tools).
+// The Artifact tool is interactive-only and its JSON schema defeats llama.cpp's
+// grammar converter — every turn dies "400 Failed to initialize samplers: failed
+// to parse grammar" (bisected 2026-09-04, allmind-local:8002 / Qwen 3.8 27B).
+const LOCAL_MODEL_INTERACTIVE_TOOLS = 'Read,Edit,Write,Glob,Grep,PowerShell';
 // Pin a known-good codex model. gpt-5.5 is confirmed working on Codex CLI
 // 0.133.0 (Phase 1 contract validation, 2026-06-03) — the prior note that it
 // "requires a newer version" was outdated. Every current AllMind caller passes
@@ -1349,7 +1354,10 @@ async function openSession(opts = {}) {
     (opts.role === 'coordinator' ? 'Bash,Read,Edit,Write,Glob,Grep' : undefined);
   // Coordinator sessions are interactive (visible terminal) — MCP suppression
   // caused hangs; coordinators don't need strict MCP since they're supervised.
-  const strictMcp = opts.strictMcp ?? false;
+  // The local-model profile is the one exception: the user MCP servers' tool
+  // schemas alone nearly fill the rig's 131K window, so it defaults to strict
+  // (no --mcp-config, so nothing loads). Callers can still override.
+  const strictMcp = opts.strictMcp ?? isLocalModelEnabled(opts);
 
   // Build launcher PowerShell script
   const localModelProfile = isLocalModelEnabled(opts) ? getLocalModelProfile(opts) : null;
@@ -1381,6 +1389,12 @@ async function openSession(opts = {}) {
   // Tool restrictions
   if (allowedTools) {
     claudeArgs.push(`--allowed-tools "${allowedTools}"`);
+  }
+
+  // Built-in toolset selection (--tools), the same flag buildArgs uses for one-shot
+  // runs. Local-model sessions only; opts.tools overrides the default list.
+  if (localModelProfile) {
+    claudeArgs.push(`--tools "${escapePowerShellString(String(opts.tools ?? LOCAL_MODEL_INTERACTIVE_TOOLS).trim())}"`);
   }
 
   // Model selection — when local-model is enabled and caller didn't specify
@@ -1912,5 +1926,5 @@ export {
   run, openSession, openHeadlessSession, treeKill, resolveClaudePath, resolveCodexPath, sanitizeEnv, sanitizeEnvCodex, buildArgs, buildCodexArgs, parseArgs, normalizeBackend,
   ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, ledgerPurge,
   checkPidAlive, discoverProcesses, readLedger, writeLedger, LEDGER_PATH,
-  buildLauncherEnvLines, AGENT_SESSION_VAR,
+  buildLauncherEnvLines, AGENT_SESSION_VAR, LOCAL_MODEL_INTERACTIVE_TOOLS,
 };
