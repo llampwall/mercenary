@@ -103,6 +103,13 @@ flag. The `Bash` deny in `data/claude-local-model-settings.json` stays: the prof
 `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` and the PowerShell tool is a separate tool, so the deny blocks nothing
 the allowlist grants. Headless one-shot local runs (`buildArgs`) are unaffected.
 
+The rig-gated live check in `test/mercenary.test.js` proves the profile end to end: it takes the first
+lane that answers `/health` in the order skynet:8005, allmind-local:8002, skynet:8003 (llama.cpp before
+NInfer), launches with that rig's served model name read from `P:\software\allmind\config\rigs.json`
+(`rigs.<key>.model` — the launcher's default name is not what these rigs serve), and asserts one turn
+writes a marker file via PowerShell with no grammar error. On a llama.cpp lane any failure reddens the
+gate; only NInfer refusing the request shape outright skips, quoting the API error verbatim.
+
 #### Environment Sanitization (`sanitizeEnv()`)
 
 Always applied to child process env:
