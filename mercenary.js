@@ -965,7 +965,14 @@ function run(opts = {}) {
     // honored, the child owns a HIDDEN console, and its whole tree inherits it.
     // Nothing here needed detached: treeKill uses taskkill /T /F by PID (not the
     // process group), and a Windows child outlives its parent without it.
-    const proc = spawn(binaryPath, spawnArgs, {
+    // opts.spawnLauncher is the one-shot twin of opts.launch on the interactive path: a caller
+    // may host this process somewhere other than a plain child_process.spawn, as long as it
+    // returns a ChildProcess with the same pipes and a pid that still tree-kills. AllMind uses
+    // it to start a protected worker at Low mandatory integrity level; absent it, this is the
+    // spawn it always was. The launcher takes node's own (command, args, options) so nothing
+    // here needs to know what it does.
+    const launch = typeof opts.spawnLauncher === 'function' ? opts.spawnLauncher : spawn;
+    const proc = launch(binaryPath, spawnArgs, {
       cwd: opts.cwd || process.cwd(),
       shell: false,
       windowsHide: true,
