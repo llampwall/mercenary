@@ -507,6 +507,23 @@ describe('buildArgs (claude one-shot) tool selection', () => {
   });
 });
 
+describe('buildArgs (claude one-shot) local-model thinking display', () => {
+  // NInfer rejects the `thinking.display: "omitted"` a non-interactive text/json session adds by
+  // default; an explicit "summarized" is accepted by every rig and leaves thinking ON.
+  it('a local-model one-shot pins --thinking-display summarized', () => {
+    const args = buildArgs({ prompt: 'hi', useLocalModel: true });
+    const idx = args.indexOf('--thinking-display');
+    assert.ok(idx >= 0, '--thinking-display not found');
+    assert.strictEqual(args[idx + 1], 'summarized');
+    assert.ok(!args.includes('--thinking'), 'thinking itself is never disabled on the local profile');
+  });
+
+  it('an Anthropic one-shot carries no --thinking-display', () => {
+    const args = buildArgs({ prompt: 'hi' });
+    assert.ok(!args.includes('--thinking-display'));
+  });
+});
+
 describe('parseArgs', () => {
   it('parses --backend codex', () => {
     const { opts } = parseArgs(['node', 'mercenary.js', '--prompt', 'hi', '--backend', 'codex']);
@@ -1149,6 +1166,7 @@ describe('openSession local-model launch profile', () => {
     assert.ok(script.includes('--strict-mcp-config'), 'local session suppresses MCP servers');
     assert.ok(!script.includes('--mcp-config'), 'no MCP config file is passed, so nothing loads');
     assert.ok(script.includes('claude-local-model-settings.json'), 'the local settings file is still attached');
+    assert.ok(script.includes('--thinking-display summarized'), 'the local session pins the display NInfer accepts, thinking stays on');
   });
 
   it('emits neither for a non-local interactive session', async () => {

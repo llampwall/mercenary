@@ -263,6 +263,18 @@ function resolveLocalModelName(opts = {}) {
   return opts.localModelName || opts.local_model_name || opts.model || DEFAULT_LOCAL_MODEL_NAME;
 }
 
+// Thinking stays ON for local models (the rigs' templates default to it; a 27B that reasons is the
+// whole point). What has to be pinned is the DISPLAY field: a non-interactive Claude Code session
+// with text/json output adds `thinking.display: "omitted"` (stream-json + --verbose does not, which
+// is why the headless dispatch path always worked), and NInfer rejects that value with
+// `400 thinking.display='omitted' requires encrypted hidden-reasoning restore semantics` — the
+// forced-json recordedRun lanes died on it. An explicit display always wins in the CLI, and
+// "summarized" is the one value every rig accepts. Probed 2026-09-12 against skynet ninfer, Low and
+// Medium integrity, thinking tokens present in usage.
+function localThinkingDisplayArgs() {
+  return ['--thinking-display', 'summarized'];
+}
+
 function getLocalModelSettingsPath(opts = {}) {
   return opts.localModelSettingsPath || opts.local_model_settings_path || LOCAL_MODEL_SETTINGS_PATH;
 }
@@ -715,6 +727,7 @@ function buildArgs(opts) {
   // settings file, so the two are mutually exclusive — one --settings per spawn.
   if (isLocalModelEnabled(opts)) {
     args.push('--settings', getLocalModelSettingsPath(opts));
+    args.push(...localThinkingDisplayArgs());
   } else if (opts.settingsPath) {
     args.push('--settings', opts.settingsPath);
   }
@@ -1388,6 +1401,7 @@ async function openSession(opts = {}) {
   const claudeArgs = [`& "${claudePath}"`];
   if (localModelProfile) {
     claudeArgs.push(`--settings "${escapePowerShellString(getLocalModelSettingsPath(opts))}"`);
+    claudeArgs.push(localThinkingDisplayArgs().join(' '));
   } else if (opts.settingsPath) {
     claudeArgs.push(`--settings "${escapePowerShellString(opts.settingsPath)}"`);
   }
@@ -1526,6 +1540,7 @@ async function openHeadlessSession(opts = {}) {
   const args = [];
   if (isLocalModelEnabled(opts)) {
     args.push('--settings', getLocalModelSettingsPath(opts));
+    args.push(...localThinkingDisplayArgs());
   } else if (opts.settingsPath) {
     args.push('--settings', opts.settingsPath);
   }

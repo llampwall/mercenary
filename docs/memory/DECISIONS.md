@@ -4,6 +4,7 @@
 # Decisions
 
 ## Recent (last 30 days)
+- Pinned `--thinking-display summarized` on every local-model claude launch: Claude Code adds `display: "omitted"` to non-interactive text/json sessions and NInfer rejects that value with a 400, which is why the forced-json recordedRun lanes failed while stream-json dispatches did not; thinking itself stays on (the disable-thinking attempt was reverted as a nerf)
 - Gave interactive local-model sessions their own launch profile: a six-tool allowlist and strict MCP with no config, because the Artifact tool's schema breaks llama.cpp's grammar converter and the MCP tool schemas nearly fill the rig's 131K window
 - Made the rig-gated live check conclusive: it runs on a llama.cpp lane with the rig's own served model name, fails the gate on any error there, and skips only when NInfer refuses the request shape
 - Dropped `detached: true` for the claude backend too — a detached headless claude has no console (DETACHED_PROCESS beats CREATE_NO_WINDOW), so Claude Code's startup `cmd /c REG QUERY MachineGuid` popped a cmd.exe window per session; confirmed by eye, hidden-console runs were silent
@@ -28,6 +29,12 @@
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
 
 ## 2026-09
+
+### 2026-09-12 — Local-model launches pin `--thinking-display summarized`; thinking itself stays on
+
+- **Why:** NInfer rejects `thinking.display: "omitted"` unconditionally (`src/serve/anthropic_messages_request.cpp`, present since the first build) and Claude Code adds that value to every NON-INTERACTIVE session whose output format is text, or json without `--verbose` (`Wvn` in the 2.1.258 bundle; stream-json + `--verbose` adds nothing, an explicit display always wins). So the headless dispatch path (stream-json, verbose) always worked on the ninfer rig, while the recordedRun lanes that force the json envelope failed every turn with `400 thinking.display='omitted' requires encrypted hidden-reasoning restore semantics` (48 AllMind error rows, 2026-09-11/12), and a plain `-p` probe reproduces it. Disabling thinking (`CLAUDE_CODE_DISABLE_THINKING`) also "fixes" it and was reverted the same day (`2fb3c1b`): the engine's usage then reports zero thinking tokens, and a 27B that reasons is the point of the lane.
+- **Impact:** All three claude arg builders (one-shot `buildArgs`, headless stream, interactive launcher) emit `--thinking-display summarized` under the local-model profile via `localThinkingDisplayArgs()`. Probed 2026-09-12 against skynet ninfer at Low and Medium integrity: text output with the flag answers correctly, thinking present in the engine's usage.
+- **Evidence:** this commit; NInfer `docs/serving.md` "Thinking" paragraph; AllMind `data/core/background-errors.jsonl`.
 
 ### 2026-09-05 — Made the local-model live check conclusive and lane-aware
 
