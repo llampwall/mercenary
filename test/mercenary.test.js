@@ -189,14 +189,6 @@ describe('sanitizeEnv', () => {
     // ANTHROPIC_AUTH_TOKEN must remain unset — setting it flips Claude Code into
     // API-billing mode and triggers the native-Windows enterprise sandbox gate.
     assert.strictEqual(env.ANTHROPIC_AUTH_TOKEN, undefined);
-    // Thinking is disabled on the local profile: Claude Code 2.1.258's thinking.display field
-    // is rejected 400 by the local engines (2026-09-11), so every local turn failed without this.
-    assert.strictEqual(env.CLAUDE_CODE_DISABLE_THINKING, '1');
-  });
-
-  it('does not disable thinking on a non-local (Anthropic) launch', () => {
-    const env = sanitizeEnv({});
-    assert.strictEqual(env.CLAUDE_CODE_DISABLE_THINKING, undefined);
   });
 
   it('accepts local_model alias and local profile overrides', () => {

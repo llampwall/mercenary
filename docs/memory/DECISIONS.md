@@ -4,7 +4,6 @@
 # Decisions
 
 ## Recent (last 30 days)
-- Disabled Claude Code thinking on the local-model profile (`CLAUDE_CODE_DISABLE_THINKING=1`, stripped first on every launch): NInfer rejects 2.1.258's `thinking.display` field with a 400, so every local launch on that rig had failed since 2026-09-11
 - Gave interactive local-model sessions their own launch profile: a six-tool allowlist and strict MCP with no config, because the Artifact tool's schema breaks llama.cpp's grammar converter and the MCP tool schemas nearly fill the rig's 131K window
 - Made the rig-gated live check conclusive: it runs on a llama.cpp lane with the rig's own served model name, fails the gate on any error there, and skips only when NInfer refuses the request shape
 - Dropped `detached: true` for the claude backend too — a detached headless claude has no console (DETACHED_PROCESS beats CREATE_NO_WINDOW), so Claude Code's startup `cmd /c REG QUERY MachineGuid` popped a cmd.exe window per session; confirmed by eye, hidden-console runs were silent
@@ -29,12 +28,6 @@
 - `openSession()` now POSTs real `claude.exe` PID to AllMind ledger via background job when `dispatchId` is set; launcher PID (exits seconds after spawn) is no longer the only tracked PID — enables AllMind liveness-based session model
 
 ## 2026-09
-
-### 2026-09-12 — The local-model profile disables Claude Code thinking
-
-- **Why:** Claude Code (2.1.258 at the time) sends `thinking.display='omitted'`, and NInfer rejects it with `400 thinking.display='omitted' requires encrypted hidden-reasoning restore semantics` on the first turn — the same refusal the 2026-09-05 live check already skipped on. Every AllMind local-model launch on the NInfer rig therefore failed (48 error-log rows from 2026-09-11), while the operator's own `qlaude.ps1`, which sets `CLAUDE_CODE_DISABLE_THINKING=1`, worked.
-- **Impact:** `getLocalModelProfile` now carries `CLAUDE_CODE_DISABLE_THINKING: '1'`, so both the headless env and the interactive launcher lines get it; `sanitizeEnv` strips an inherited value first so an Anthropic launch never loses thinking by inheritance. Probed 2026-09-12 against skynet ninfer: 400 without it, a reply in ~5 s with it, at Low and Medium integrity.
-- **Evidence:** this commit; AllMind `data/core/background-errors.jsonl` rows `thinking.display` from 2026-09-11.
 
 ### 2026-09-05 — Made the local-model live check conclusive and lane-aware
 

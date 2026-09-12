@@ -252,16 +252,10 @@ function normalizeBackend(opts = {}) {
 // (banner falls back to default Sonnet). The supported way to select a model
 // is the --model CLI flag, which openSession adds automatically when
 // local-model is enabled (see resolveLocalModelName below).
-// CLAUDE_CODE_DISABLE_THINKING: Claude Code 2.1.258 sends `thinking.display='omitted'`, which the
-// local engines reject ("400 thinking.display='omitted' requires encrypted hidden-reasoning") —
-// every local-model turn failed from 2026-09-11 until this was set (48 rows in AllMind's error
-// log). Same recipe as the operator's working qlaude.ps1. Probed 2026-09-12 against ninfer on
-// skynet: without it 400 on the first turn, with it a reply in ~5 s, at Low and Medium integrity.
 function getLocalModelProfile(opts = {}) {
   return {
     ANTHROPIC_BASE_URL: opts.localModelUrl || opts.local_model_url || DEFAULT_LOCAL_MODEL_URL,
     API_TIMEOUT_MS: String(opts.localModelTimeoutMs || opts.local_model_timeout_ms || DEFAULT_LOCAL_MODEL_TIMEOUT_MS),
-    CLAUDE_CODE_DISABLE_THINKING: '1',
   };
 }
 
@@ -357,9 +351,6 @@ function sanitizeEnv(opts = {}) {
   delete env.API_TIMEOUT_MS;
   delete env.ALLMIND_LOCAL_MODEL;
   delete env.CLAUDE_CODE_REMOTE;
-  // Part of the local profile (getLocalModelProfile), so an Anthropic launch must not inherit it
-  // from an operator shell (qlaude.ps1 sets it) and lose thinking on a frontier model.
-  delete env.CLAUDE_CODE_DISABLE_THINKING;
   for (const k of Object.keys(env)) {
     if (k.toUpperCase().startsWith('ANTHROPIC_DEFAULT_')) delete env[k];
   }
