@@ -4,7 +4,7 @@
 # State
 
 ## Current Objective
-Core implementation complete. Recent focus: the interactive local-model (qwen) launch profile — a six-tool allowlist plus strict MCP with no config so llama.cpp's grammar converter and the 131K rig window both hold, proven by a rig-gated live check. Next: real CI, versioning workflow, remaining Codex integration test coverage.
+Core implementation complete. Recent focus: the local-model (qwen) launch profile — `--thinking-display summarized` pinned on all three claude arg builders so NInfer stops 400ing the forced-json lanes, plus a new `opts.spawnLauncher` hook letting a caller host the one-shot spawn (AllMind runs an unattended worker at Low integrity through it). Next: real CI, versioning workflow, remaining Codex integration test coverage.
 
 ## Active Work
 - None — all recent work committed
@@ -21,7 +21,7 @@ Core implementation complete. Recent focus: the interactive local-model (qwen) l
 
 ## Quick Reference
 - Run: `node mercenary.js --prompt "test" --timeout 10`
-- Test: `node test/mercenary.test.js` (111 tests: 102 pass, 0 fail, 9 skipped — run 2026-09-05)
+- Test: `node test/mercenary.test.js` (113 tests: 103 pass, 0 fail, 10 skipped — run 2026-09-12)
 - Codex run: `node mercenary.js --prompt "test" --backend codex --timeout 10`
 - Interactive: `node mercenary.js --interactive`
 - Local model: `node mercenary.js --use-local-model --prompt "test"` (or `--backend qwen`)
@@ -32,7 +32,7 @@ Core implementation complete. Recent focus: the interactive local-model (qwen) l
 - Linux/macOS process orchestration
 
 ---
-Last memory update: 2026-09-05
-Commits covered through: 6c1552510aa6cfeed79f7d75167fb5065e0c5b75
+Last memory update: 2026-09-12
+Commits covered through: 3641f8f23ea2e231e0ceb2cffc7c7157105797ce
 
-<!-- chinvex:last-commit:6c1552510aa6cfeed79f7d75167fb5065e0c5b75 -->
+<!-- chinvex:last-commit:3641f8f23ea2e231e0ceb2cffc7c7157105797ce -->
