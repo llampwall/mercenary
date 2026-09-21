@@ -1949,4 +1949,8 @@ export {
   ledgerRegister, ledgerMarkDead, ledgerAudit, ledgerStatus, ledgerPurge,
   checkPidAlive, discoverProcesses, readLedger, writeLedger, LEDGER_PATH,
   buildLauncherEnvLines, AGENT_SESSION_VAR, LOCAL_MODEL_INTERACTIVE_TOOLS,
+  // The local-model settings file a spawn runs under when opts.localModelSettingsPath names none.
+  // Exported so a caller deriving a per-rig variant (AllMind's spawn seam) starts from this file
+  // rather than restating its contents.
+  LOCAL_MODEL_SETTINGS_PATH,
 };
