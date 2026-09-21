@@ -452,7 +452,11 @@ function buildLauncherEnvLines(opts = {}, localModelProfile = null, localModelEn
     '$env:CLAUDE_CODE_USE_POWERSHELL_TOOL = "1"',
     '$env:CLAUDE_CODE_REMOTE = "1"',
     '$env:SHELL = "C:\\Users\\Jordan\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe"',
-    `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "${opts.maxTokens || 65536}"`,
+    // The local-model profile's lower output ceiling, same rule and reason as sanitizeEnv's: a caller's
+    // explicit maxTokens wins, else a rig gets DEFAULT_LOCAL_MODEL_MAX_OUTPUT_TOKENS. This path emitted
+    // 65536 unconditionally until 2026-09-21, which a 64K rig refuses outright (max_tokens alone
+    // fills its whole context) and which on a 131K rig arrived verbatim as the compaction budget.
+    `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "${opts.maxTokens || (localModelProfile ? DEFAULT_LOCAL_MODEL_MAX_OUTPUT_TOKENS : 65536)}"`,
     // Expose dispatch_id so the spawned session can include it in events
     ...(opts.dispatchId ? [`$env:ALLMIND_DISPATCH_ID = "${opts.dispatchId.replace(/"/g, '')}"`] : []),
     // Bake any additional caller-supplied env vars (e.g. ALLMIND_ORIGIN_THREAD_ID, ALLMIND_THREAD_ID)

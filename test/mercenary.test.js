@@ -272,6 +272,18 @@ describe('agent-session marker (ALLMIND_AGENT_SESSION)', () => {
     });
   }
 
+  it('the launcher gives a local-model session the lower output ceiling sanitizeEnv gives it', () => {
+    // 2026-09-21: the interactive launcher emitted 65536 unconditionally, which a 64K rig refuses
+    // outright (max_tokens alone fills its context) while sanitizeEnv's headless path already
+    // lowered it. Same rule on both paths: caller's maxTokens wins, else the local default.
+    const read = (opts, profile) => buildLauncherEnvLines(opts, profile, [])
+      .map(l => l.match(/^\$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "(.*)"$/)).filter(Boolean).at(-1)[1];
+    assert.strictEqual(read({}, null), '65536', 'a cloud session keeps the Anthropic-scale ceiling');
+    assert.strictEqual(read({}, { ANTHROPIC_BASE_URL: 'http://rig:8002' }), '16384', 'a local-model session gets the rig ceiling');
+    assert.strictEqual(read({ maxTokens: 4096 }, { ANTHROPIC_BASE_URL: 'http://rig:8002' }), '4096', 'an explicit maxTokens still wins');
+    assert.strictEqual(sanitizeEnv({ useLocalModel: true }).CLAUDE_CODE_MAX_OUTPUT_TOKENS, '16384', 'and it is the same value the headless path sets');
+  });
+
   it('the launcher emits the marker after the caller env block', () => {
     // Emission order is the enforcement: PowerShell's $env: provider is case-insensitive, so the
     // last assignment is the one the session runs with.
